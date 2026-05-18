@@ -18,6 +18,7 @@ Advanced GNSS/IMU/LiDAR sensor fusion navigation system for agricultural machine
 ### 1. Install Dependencies
 
 ```bash
+cd Agro-Navigation
 pip install -r requirements.txt
 ```
 
@@ -34,7 +35,7 @@ Visit http://localhost:8000 in your browser
 ### 4. Run Tests
 
 ```bash
-pytest tests/
+pytest
 ```
 
 ## Operation Modes
