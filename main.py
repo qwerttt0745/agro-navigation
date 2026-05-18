@@ -1,115 +1,108 @@
-"""FastAPI backend server for Agro Navigation System"""
+"""FastAPI server for Agro Navigation System."""
 import asyncio
 import json
 import logging
+from typing import List
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 import uvicorn
-from backend.navigation.navigation_system import NavigationSystem
 
-# Setup logging
+from navigation.nav_controller import NavigationController
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(title="Agro Navigation System")
+app = FastAPI(title="Агро-Навігація: Система навігації агротехніки")
 
-# Global navigation system
-nav_system = None
+nav_controller = NavigationController()
 simulation_running = False
-current_clients = []
+simulation_paused = False
+connected_clients: List[WebSocket] = []
 
 
 @app.on_event("startup")
-async def startup_event():
-    """Initialize navigation system on startup"""
-    global nav_system
-    nav_system = NavigationSystem()
-    nav_system.initialize()
-    logger.info("Navigation System initialized")
+async def startup_event() -> None:
+    nav_controller.initialize()
+    logger.info("Navigation Controller initialized")
 
 
 @app.get("/")
 async def root():
-    """Serve main HTML"""
-    return FileResponse("frontend/index.html")
+    return FileResponse("static/index.html")
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time navigation data"""
+    global simulation_running, simulation_paused
+
     await websocket.accept()
-    current_clients.append(websocket)
-    
+    connected_clients.append(websocket)
+
     try:
-        logger.info("WebSocket client connected")
-        
         while True:
-            # Receive commands from client
             try:
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=1.0)
-                command = json.loads(data)
-                
-                if command.get("action") == "start":
-                    global simulation_running
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
+                cmd = json.loads(raw)
+                action = cmd.get("action")
+
+                if action == "start":
                     simulation_running = True
-                    logger.info("Simulation started")
-                
-                elif command.get("action") == "stop":
+                    simulation_paused = False
+                    logger.info("Simulation STARTED")
+                elif action == "stop":
                     simulation_running = False
-                    logger.info("Simulation stopped")
-                
-                elif command.get("action") == "reset":
-                    nav_system.initialize()
-                    logger.info("Navigation system reset")
-            
+                    logger.info("Simulation STOPPED")
+                elif action == "pause":
+                    simulation_paused = True
+                    logger.info("Simulation PAUSED")
+                elif action == "resume":
+                    simulation_paused = False
+                    logger.info("Simulation RESUMED")
+                elif action == "reset":
+                    nav_controller.reset()
+                    simulation_running = False
+                    simulation_paused = False
+                    logger.info("Simulation RESET")
+                elif action == "scenario":
+                    scenario = cmd.get("name", "gnss_loss")
+                    nav_controller.trigger_scenario(scenario)
+                    logger.info("Scenario triggered: %s", scenario)
+
             except asyncio.TimeoutError:
                 pass
-            
-            # Send navigation cycle if simulation running
-            if simulation_running:
+
+            if simulation_running and not simulation_paused:
                 try:
-                    result = nav_system.run_navigation_cycle()
-                    
-                    # Send to all connected clients
-                    for client in current_clients:
+                    telemetry = nav_controller.step(0.1)
+                    for client in connected_clients[:]:
                         try:
-                            await client.send_json(result)
-                        except Exception as e:
-                            logger.error(f"Error sending to client: {e}")
-                    
-                    # 100ms cycle (10 Hz)
-                    await asyncio.sleep(0.1)
-                
-                except Exception as e:
-                    logger.error(f"Error in navigation cycle: {e}")
-                    await asyncio.sleep(0.1)
-            else:
-                await asyncio.sleep(0.1)
-    
+                            await client.send_json(telemetry, default=str)
+                        except Exception:
+                            connected_clients.remove(client)
+                except Exception as exc:
+                    logger.error("Step error: %s", exc)
+
+            await asyncio.sleep(0.1)
+
     except WebSocketDisconnect:
-        if websocket in current_clients:
-            current_clients.remove(websocket)
-        logger.info("WebSocket client disconnected")
-    
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
-        if websocket in current_clients:
-            current_clients.remove(websocket)
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)
+    except Exception as exc:
+        logger.error("WS error: %s", exc)
+        if websocket in connected_clients:
+            connected_clients.remove(websocket)
 
 
-@app.get("/status")
-async def get_status():
-    """Get current system status"""
-    if nav_system:
-        report = nav_system.generate_work_report()
-        return {
-            "running": simulation_running,
-            "status": report,
-            "connected_clients": len(current_clients)
-        }
-    return {"error": "System not initialized"}
+@app.get("/api/status")
+async def status():
+    return {
+        "running": simulation_running,
+        "paused": simulation_paused,
+        "mode": nav_controller.mode.value,
+        "time": nav_controller.simulation_time,
+    }
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)

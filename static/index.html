@@ -316,6 +316,64 @@
             color: #80deea;
             font-weight: 600;
         }
+
+        .info-panel {
+            background-color: #1a1a2e;
+            border-radius: 4px;
+            padding: 12px;
+            margin-top: 10px;
+            border: 1px solid #0f9fa5;
+        }
+
+        .info-title {
+            font-size: 12px;
+            color: #80deea;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 12px;
+            margin: 4px 0;
+        }
+
+        .info-label {
+            color: #b0bec5;
+        }
+
+        .info-value {
+            color: #e8eaf6;
+            font-weight: 600;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 10px;
+        }
+
+        .error-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .error-table th,
+        .error-table td {
+            text-align: left;
+            padding: 4px 0;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .error-table th {
+            color: #b0bec5;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -382,6 +440,50 @@
                     <span class="numeric-value" id="cycleTime">0.6 мс</span>
                 </div>
             </div>
+
+            <div class="info-panel">
+                <div class="info-title">Вимоги курсової</div>
+                <div class="info-row">
+                    <span class="info-label">Активна вимога:</span>
+                    <span class="info-value" id="requirementText">FR-01: GNSS RTK</span>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div class="info-title">Час у режимах</div>
+                <div class="info-grid">
+                    <div class="info-row"><span class="info-label">GNSS:</span><span class="info-value" id="timeGnss">0.0 с</span></div>
+                    <div class="info-row"><span class="info-label">DR:</span><span class="info-value" id="timeDr">0.0 с</span></div>
+                    <div class="info-row"><span class="info-label">LiDAR:</span><span class="info-value" id="timeLidar">0.0 с</span></div>
+                    <div class="info-row"><span class="info-label">SAFE:</span><span class="info-value" id="timeSafe">0.0 с</span></div>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div class="info-title">GNSS якість</div>
+                <div class="info-grid">
+                    <div class="info-row"><span class="info-label">SNR:</span><span class="info-value" id="gnssSnrPanel">45 дБГц</span></div>
+                    <div class="info-row"><span class="info-label">Супутники:</span><span class="info-value" id="gnssSatPanel">12</span></div>
+                    <div class="info-row"><span class="info-label">Якість:</span><span class="info-value" id="gnssQualPanel">100%</span></div>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div class="info-title">Похибка позиціонування</div>
+                <table class="error-table">
+                    <thead>
+                        <tr>
+                            <th>Режим</th>
+                            <th>Похибка</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>GNSS</td><td id="errGnss">0.02 м</td></tr>
+                        <tr><td>DR</td><td id="errDr">0.10 м</td></tr>
+                        <tr><td>LiDAR</td><td id="errLidar">0.05 м</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
         <div id="chartContainer">
@@ -405,9 +507,25 @@
         // ================== Configuration ==================
         const MAP_CENTER = [48.9500, 32.1000];
         const FIELD_SIZE = { width: 500, height: 300 };
+        const FIELD_ORIGIN = { x: 50, y: 50 };
+        const BASE_LAT = MAP_CENTER[0];
+        const BASE_LON = MAP_CENTER[1];
+        const LAT_PER_M = 1 / 111320;
+        const LON_PER_M = 1 / (111320 * Math.cos(BASE_LAT * Math.PI / 180));
         let map = null;
         let ws = null;
         let isPaused = false;
+        let lastTimestamp = null;
+        const modeDurations = {
+            GNSS_RTK: 0,
+            DEAD_RECKONING: 0,
+            LIDAR_NAV: 0,
+            SAFE_STOP: 0
+        };
+
+        function xytolatlng(x, y) {
+            return [BASE_LAT + y * LAT_PER_M, BASE_LON + x * LON_PER_M];
+        }
         
         // ================== Map Initialization ==================
         function initMap() {
@@ -417,22 +535,19 @@
                 maxZoom: 19
             }).addTo(map);
             
-            // Field boundary (5 hectares, 500x300m)
-            const lat_per_m = 1 / 111320;
-            const lon_per_m = lat_per_m / Math.cos(MAP_CENTER[0] * Math.PI / 180);
-            
+            // Field boundary (500x300m), origin at (50, 50)
             const fieldBounds = [
-                [MAP_CENTER[0], MAP_CENTER[1]],
-                [MAP_CENTER[0], MAP_CENTER[1] + FIELD_SIZE.width * lon_per_m],
-                [MAP_CENTER[0] - FIELD_SIZE.height * lat_per_m, MAP_CENTER[1] + FIELD_SIZE.width * lon_per_m],
-                [MAP_CENTER[0] - FIELD_SIZE.height * lat_per_m, MAP_CENTER[1]],
-                [MAP_CENTER[0], MAP_CENTER[1]]
+                xytolatlng(FIELD_ORIGIN.x, FIELD_ORIGIN.y),
+                xytolatlng(FIELD_ORIGIN.x + FIELD_SIZE.width, FIELD_ORIGIN.y),
+                xytolatlng(FIELD_ORIGIN.x + FIELD_SIZE.width, FIELD_ORIGIN.y + FIELD_SIZE.height),
+                xytolatlng(FIELD_ORIGIN.x, FIELD_ORIGIN.y + FIELD_SIZE.height),
+                xytolatlng(FIELD_ORIGIN.x, FIELD_ORIGIN.y)
             ];
             
             L.polyline(fieldBounds, { color: '#4CAF50', weight: 2, opacity: 0.7 }).addTo(map);
             
             // Tractor marker
-            window.tractorMarker = L.circleMarker(MAP_CENTER, { 
+            window.tractorMarker = L.circleMarker(xytolatlng(FIELD_ORIGIN.x, FIELD_ORIGIN.y), { 
                 radius: 8, 
                 color: '#80deea', 
                 fill: true, 
@@ -441,7 +556,7 @@
             }).addTo(map).bindPopup('Трактор');
             
             // True position marker (semi-transparent)
-            window.trueMarker = L.circleMarker(MAP_CENTER, { 
+            window.trueMarker = L.circleMarker(xytolatlng(FIELD_ORIGIN.x, FIELD_ORIGIN.y), { 
                 radius: 5, 
                 color: 'rgba(255,255,255,0.3)',
                 fill: true,
@@ -548,21 +663,44 @@
             } else if (data.mode.includes('SAFE')) {
                 modeBadge.classList.add('safe-stop');
             }
+
+            const requirementMap = {
+                GNSS_RTK: 'FR-01: Обробка GNSS | NFR-PER-01: точність ±2 см',
+                DEAD_RECKONING: 'FR-04: Автономне позиціонування (Dead Reckoning)',
+                LIDAR_NAV: 'FR-05: Локальна навігація LiDAR/SLAM',
+                SAFE_STOP: 'BR-01: Мінімізація простоїв'
+            };
+            document.getElementById('requirementText').textContent = requirementMap[data.mode] || '—';
+
+            if (lastTimestamp !== null) {
+                const delta = Math.max(0, data.timestamp - lastTimestamp);
+                if (delta < 5) {
+                    if (modeDurations[data.mode] !== undefined) {
+                        modeDurations[data.mode] += delta;
+                    }
+                }
+            }
+            lastTimestamp = data.timestamp;
+
+            document.getElementById('timeGnss').textContent = modeDurations.GNSS_RTK.toFixed(1) + ' с';
+            document.getElementById('timeDr').textContent = modeDurations.DEAD_RECKONING.toFixed(1) + ' с';
+            document.getElementById('timeLidar').textContent = modeDurations.LIDAR_NAV.toFixed(1) + ' с';
+            document.getElementById('timeSafe').textContent = modeDurations.SAFE_STOP.toFixed(1) + ' с';
             
             // Update map
             const lat = data.position.lat;
             const lon = data.position.lon;
             window.tractorMarker.setLatLng([lat, lon]);
-            window.trueMarker.setLatLng([data.true_position.lat || lat, data.true_position.lon || lon]);
+            if (data.true_position && data.true_position.x !== undefined) {
+                const trueLatLng = xytolatlng(data.true_position.x, data.true_position.y);
+                window.trueMarker.setLatLng(trueLatLng);
+            } else {
+                window.trueMarker.setLatLng([lat, lon]);
+            }
             
             // Update trajectory path
             if (data.trajectory_history && data.trajectory_history.length > 0) {
-                const lat_per_m = 1 / 111320;
-                const lon_per_m = lat_per_m / Math.cos(MAP_CENTER[0] * Math.PI / 180);
-                const pathCoords = data.trajectory_history.map(([x, y]) => [
-                    MAP_CENTER[0] - y * lat_per_m,
-                    MAP_CENTER[1] + x * lon_per_m
-                ]);
+                const pathCoords = data.trajectory_history.map(([x, y]) => xytolatlng(x, y));
                 window.pathLine.setLatLngs(pathCoords);
             }
             
@@ -571,6 +709,10 @@
             document.getElementById('gnsssatellites').textContent = data.gnss.satellites || 0;
             document.getElementById('gnssSnr').textContent = data.gnss.snr ? data.gnss.snr.toFixed(1) + ' дБГц' : 'N/A';
             document.getElementById('gnssQuality').textContent = data.gnss.signal_quality ? Math.round(data.gnss.signal_quality * 100) + '%' : '0%';
+
+            document.getElementById('gnssSnrPanel').textContent = data.gnss.snr ? data.gnss.snr.toFixed(1) + ' дБГц' : '0 дБГц';
+            document.getElementById('gnssSatPanel').textContent = data.gnss.satellites || 0;
+            document.getElementById('gnssQualPanel').textContent = data.gnss.signal_quality ? Math.round(data.gnss.signal_quality * 100) + '%' : '0%';
             
             const gnssCard = document.getElementById('gnssCard');
             gnssCard.className = 'sensor-card';
@@ -594,9 +736,17 @@
             
             // Update numerics
             document.getElementById('ctError').textContent = data.cross_track_error.toFixed(2) + ' м';
-            document.getElementById('speed').textContent = (data.position.speed * 3.6).toFixed(1) + ' км/г';
+            const speedKmh = data.position.speed * 3.6;
+            document.getElementById('speed').textContent = speedKmh.toFixed(1) + ' км/г (' + data.position.speed.toFixed(1) + ' м/с)';
             document.getElementById('heading').textContent = (data.position.heading_deg).toFixed(1) + '°';
             document.getElementById('cycleTime').textContent = data.cycle_time_ms.toFixed(1) + ' мс';
+
+            const errGnss = 0.02;
+            const errDr = data.imu.drift_error;
+            const errLidar = data.lidar.active ? Math.max(data.position.position_uncertainty, 0.05) : 0.05;
+            document.getElementById('errGnss').textContent = errGnss.toFixed(2) + ' м';
+            document.getElementById('errDr').textContent = errDr.toFixed(2) + ' м';
+            document.getElementById('errLidar').textContent = errLidar.toFixed(2) + ' м';
             
             // Update time
             const minutes = Math.floor(data.timestamp / 60);
@@ -644,12 +794,16 @@
         // ================== Button Handlers ==================
         document.getElementById('btnStart').onclick = () => {
             isPaused = false;
-            ws.send(JSON.stringify({ action: 'resume' }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'start' }));
+            }
         };
         
         document.getElementById('btnPause').onclick = () => {
             isPaused = true;
-            ws.send(JSON.stringify({ action: 'pause' }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'pause' }));
+            }
         };
         
         document.getElementById('btnReset').onclick = () => {
@@ -660,7 +814,18 @@
             document.getElementById('eventLog').innerHTML = '';
             window.pathLine.setLatLngs([]);
             isPaused = false;
-            ws.send(JSON.stringify({ action: 'reset' }));
+            lastTimestamp = null;
+            modeDurations.GNSS_RTK = 0;
+            modeDurations.DEAD_RECKONING = 0;
+            modeDurations.LIDAR_NAV = 0;
+            modeDurations.SAFE_STOP = 0;
+            document.getElementById('timeGnss').textContent = '0.0 с';
+            document.getElementById('timeDr').textContent = '0.0 с';
+            document.getElementById('timeLidar').textContent = '0.0 с';
+            document.getElementById('timeSafe').textContent = '0.0 с';
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'reset' }));
+            }
         };
         
         document.getElementById('btnSimulateLoss').onclick = () => {

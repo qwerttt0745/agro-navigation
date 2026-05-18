@@ -108,9 +108,9 @@ class DeadReckoningModule:
         return (self.estimated_x, self.estimated_y, self.estimated_heading)
     
     def get_drift_error(self) -> float:
-        \"\"\"Get accumulated position error in meters\"\"\"
+        """Get accumulated position error in meters"""
         return self.drift_error
     
     def _normalize_heading(self, heading: float) -> float:
-        \"\"\"Normalize heading to [-pi, pi] range\"\"\"
+        """Normalize heading to [-pi, pi] range"""
         return math.atan2(math.sin(heading), math.cos(heading))

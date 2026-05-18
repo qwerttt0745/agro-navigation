@@ -27,13 +27,13 @@ class OperationMode(Enum):
 
 
 class NavigationController:
-    \"\"\"
+    """
     Main navigation controller - heart of the system
     Orchestrates sensor data, applies sensor fusion, and mode switching
-    \"\"\"
+    """
     
     def __init__(self):
-        \"\"\"Initialize navigation controller\"\"\"
+        """Initialize navigation controller"""
         # Components
         self.vehicle = TractorModel()
         self.gnss = GNSSSimulator()
@@ -61,7 +61,7 @@ class NavigationController:
         self.cycle_times = []
     
     def initialize(self):
-        \"\"\"Initialize all subsystems\"\"\"
+        """Initialize all subsystems"""
         self.mode = OperationMode.GNSS_RTK
         
         # Initialize vehicle position (field center area)
@@ -78,22 +78,22 @@ class NavigationController:
         self.ekf.X[1] = self.vehicle.y
         self.ekf.X[2] = self.vehicle.heading
         
-        self.log_event(\"INFO\", \"System initialized. Mode: \" + self.mode.value)
+        self.log_event("INFO", "System initialized. Mode: " + self.mode.value)
     
     def reset(self):
-        \"\"\"Reset simulation to initial state\"\"\"
+        """Reset simulation to initial state"""
         self.__init__()
         self.initialize()
-        self.log_event(\"INFO\", \"System reset\")
+        self.log_event("INFO", "System reset")
     
     def step(self, dt: float) -> Dict:
-        \"\"\"
+        """
         Main control loop step
         Args:
             dt: Time step in seconds
         Returns:
             Telemetry packet dictionary
-        \"\"\"
+        """
         step_start_time = time.time()
         self.simulation_time += dt
         
@@ -160,14 +160,14 @@ class NavigationController:
         return telemetry
     
     def _update_navigation_mode(self, gnss_data, imu_data, dt, lidar_data):
-        \"\"\"Update operation mode based on sensor availability and timers\"\"\"
+        """Update operation mode based on sensor availability and timers"""
         
         if gnss_data is not None and gnss_data.mode in [GNSSMode.RTK_FIXED, GNSSMode.RTK_FLOAT]:
             # GNSS available
             self.gnss_lost_timer = 0.0
             if self.mode != OperationMode.GNSS_RTK:
                 self.mode = OperationMode.GNSS_RTK
-                self.log_event(\"INFO\", \"GNSS RTK active - mode switched to GNSS_RTK\")
+                self.log_event("INFO", "GNSS RTK active - mode switched to GNSS_RTK")
         else:
             # GNSS lost
             self.gnss_lost_timer += dt
@@ -181,7 +181,7 @@ class NavigationController:
                         self.vehicle.y,
                         self.vehicle.heading
                     )
-                    self.log_event(\"WARNING\", \"GNSS signal lost. Switching to Dead Reckoning (IMU)\")
+                    self.log_event("WARNING", "GNSS signal lost. Switching to Dead Reckoning (IMU)")
             
             elif self.gnss_lost_timer >= 30.0:
                 # 30 seconds without GNSS - activate LiDAR
@@ -190,13 +190,13 @@ class NavigationController:
                     if lidar_offset is not None:
                         self.mode = OperationMode.LIDAR_NAV
                         self.lidar_active_timer = 0.0
-                        self.log_event(\"WARNING\", f\"Dead Reckoning >30s. Activating LiDAR navigation (offset: {lidar_offset:.2f}m)\")
+                        self.log_event("WARNING", f"Dead Reckoning >30s. Activating LiDAR navigation (offset: {lidar_offset:.2f}m)")
                     else:
                         # Check if drift is too large
                         if self.dead_reckoning.get_drift_error() > 2.0:
                             self.mode = OperationMode.SAFE_STOP
                             self.vehicle.speed = 0.0
-                            self.log_event(\"CRITICAL\", \"Position error exceeded 2m. Safe Stop activated - manual intervention required!\")
+                            self.log_event("CRITICAL", "Position error exceeded 2m. Safe Stop activated - manual intervention required!")
             
             # LiDAR navigation active
             if self.mode == OperationMode.LIDAR_NAV:
@@ -206,10 +206,10 @@ class NavigationController:
                 if self.dead_reckoning.get_drift_error() > 2.0:
                     self.mode = OperationMode.SAFE_STOP
                     self.vehicle.speed = 0.0
-                    self.log_event(\"CRITICAL\", \"Position error in LiDAR mode exceeded threshold. Safe Stop!\")
+                    self.log_event("CRITICAL", "Position error in LiDAR mode exceeded threshold. Safe Stop!")
     
     def _calculate_cross_track_error(self, ekf_state: Dict):
-        \"\"\"Calculate lateral deviation from planned path\"\"\"
+        """Calculate lateral deviation from planned path"""
         # Simplified: cross-track error is deviation from current waypoint
         current_wp = self.vehicle.waypoints[self.vehicle.current_waypoint_idx]
         
@@ -229,7 +229,7 @@ class NavigationController:
             self.cross_track_error = 0.0
     
     def _apply_vehicle_control(self, ekf_state: Dict, dt: float):
-        \"\"\"Apply heading control to vehicle\"\"\"
+        """Apply heading control to vehicle"""
         target_heading = self.vehicle.get_target_heading()
         heading_error = target_heading - ekf_state['heading']
         
@@ -240,13 +240,13 @@ class NavigationController:
         self.vehicle.apply_autopilot(self.cross_track_error, heading_error)
     
     def _update_scenario_gnss(self, dt: float):
-        \"\"\"Update GNSS based on active scenario\"\"\"
+        """Update GNSS based on active scenario"""
         if not self.active_scenario:
             return
         
         elapsed = self.simulation_time - self.scenario_start_time
         
-        if self.active_scenario == \"gnss_loss\":
+        if self.active_scenario == "gnss_loss":
             # Short GNSS loss (10 seconds)
             if elapsed < 3:
                 pass  # Normal RTK
@@ -260,7 +260,7 @@ class NavigationController:
                 self.gnss.mode = GNSSMode.RTK_FIXED
                 self.active_scenario = None
         
-        elif self.active_scenario == \"extended_loss\":
+        elif self.active_scenario == "extended_loss":
             # Extended GNSS loss (60 seconds)
             if elapsed < 3:
                 pass  # Normal RTK
@@ -280,17 +280,17 @@ class NavigationController:
                 self.active_scenario = None
     
     def trigger_scenario(self, scenario_name: str):
-        \"\"\"Trigger a predefined scenario\"\"\"
+        """Trigger a predefined scenario"""
         self.active_scenario = scenario_name
         self.scenario_start_time = self.simulation_time
         
-        if scenario_name == \"gnss_loss\":
-            self.log_event(\"WARNING\", \"Scenario triggered: Short GNSS loss (10s)\")
-        elif scenario_name == \"extended_loss\":
-            self.log_event(\"WARNING\", \"Scenario triggered: Extended GNSS loss (60s)\")
+        if scenario_name == "gnss_loss":
+            self.log_event("WARNING", "Scenario triggered: Short GNSS loss (10s)")
+        elif scenario_name == "extended_loss":
+            self.log_event("WARNING", "Scenario triggered: Extended GNSS loss (60s)")
     
     def _build_telemetry_packet(self, ekf_state, imu_data, gnss_data, lidar_data, cycle_time) -> Dict:
-        \"\"\"Build complete telemetry packet for transmission\"\"\"
+        """Build complete telemetry packet for transmission"""
         
         gnss_info = {
             'mode': self.gnss.mode.value if gnss_data else 'LOST',
@@ -337,6 +337,7 @@ class NavigationController:
                 'y': float(self.vehicle.y),
                 'heading': float(self.vehicle.heading)
             },
+            'steering_angle_deg': float(self.vehicle.wheel_angle) * 57.2958,
             'cross_track_error': float(self.cross_track_error),
             'trajectory_history': [(float(x), float(y)) for x, y in self.vehicle.trajectory_history[-100:]],
             'gnss': gnss_info,
@@ -348,7 +349,7 @@ class NavigationController:
         return packet
     
     def log_event(self, level: str, message: str):
-        \"\"\"Log an event\"\"\"
+        """Log an event"""
         timestamp = datetime.now().isoformat()
         event = {
             'timestamp': timestamp,
@@ -359,4 +360,4 @@ class NavigationController:
         self.event_log.append(event)
         
         # Also print to console during development
-        print(f\"[{level}] {message}\")
+        print(f"[{level}] {message}")
