@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Агро-Навігація - Система навігації агротехніки</title>
+    
+    <!-- Leaflet.js for map -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    
+    <!-- Chart.js for graphs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #1a1a2e;
+            color: #e8eaf6;
+            font-family: 'Roboto', 'Segoe UI', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        #container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: 80px 1fr 150px;
+            height: 100vh;
+            gap: 10px;
+            padding: 10px;
+        }
+        
+        /* Header */
+        header {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+            border-left: 4px solid #0f9fa5;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+        }
+        
+        header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .mode-badge {
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 700;
+            font-size: 16px;
+            min-width: 200px;
+            text-align: center;
+            background-color: #4CAF50;
+            color: white;
+            text-transform: uppercase;
+        }
+        
+        .mode-badge.gnss {
+            background-color: #4CAF50;
+        }
+        
+        .mode-badge.dead-reckoning {
+            background-color: #FFC107;
+            color: #000;
+        }
+        
+        .mode-badge.lidar {
+            background-color: #FF9800;
+            color: #000;
+        }
+        
+        .mode-badge.safe-stop {
+            background-color: #f44336;
+            color: white;
+            animation: blink 0.5s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.5; }
+        }
+        
+        .time-display {
+            font-size: 14px;
+            color: #b0bec5;
+        }
+        
+        /* Map section */
+        #mapContainer {
+            grid-column: 1 / 2;
+            grid-row: 2 / 3;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 2px solid #0f3460;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Sensor status section */
+        #statusContainer {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+            background-color: #16213e;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        
+        .sensor-card {
+            background-color: #0f3460;
+            border-radius: 5px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-left: 4px solid #0f9fa5;
+        }
+        
+        .sensor-card.gnss-fixed {
+            border-left-color: #4CAF50;
+        }
+        
+        .sensor-card.gnss-degraded {
+            border-left-color: #FFC107;
+        }
+        
+        .sensor-card.gnss-lost {
+            border-left-color: #f44336;
+        }
+        
+        .sensor-card h4 {
+            margin-bottom: 8px;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #80deea;
+        }
+        
+        .sensor-info {
+            font-size: 12px;
+            color: #b0bec5;
+            line-height: 1.6;
+        }
+        
+        .sensor-info-value {
+            color: #e8eaf6;
+            font-weight: 500;
+        }
+        
+        /* Chart section */
+        #chartContainer {
+            grid-column: 3 / 4;
+            grid-row: 2 / 3;
+            background-color: #16213e;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            padding: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        
+        canvas {
+            background-color: transparent;
+        }
+        
+        /* Log section */
+        #logContainer {
+            grid-column: 1 / -1;
+            grid-row: 3 / 4;
+            background-color: #16213e;
+            border-radius: 5px;
+            border: 2px solid #0f3460;
+            padding: 15px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+        }
+        
+        #eventLog {
+            overflow-y: auto;
+            max-height: 130px;
+        }
+        
+        .event-item {
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            border-left: 3px solid;
+        }
+        
+        .event-critical {
+            background-color: rgba(244, 67, 54, 0.2);
+            border-left-color: #f44336;
+            color: #ff8a80;
+        }
+        
+        .event-warning {
+            background-color: rgba(255, 193, 7, 0.2);
+            border-left-color: #FFC107;
+            color: #ffe082;
+        }
+        
+        .event-info {
+            background-color: rgba(76, 175, 80, 0.2);
+            border-left-color: #4CAF50;
+            color: #a5d6a7;
+        }
+        
+        .event-time {
+            color: #90caf9;
+            font-size: 11px;
+        }
+        
+        /* Control buttons */
+        .button-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background-color: #0f9fa5;
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+        }
+        
+        button:hover {
+            background-color: #1ab0b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(15, 159, 165, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.danger {
+            background-color: #f44336;
+        }
+        
+        button.danger:hover {
+            background-color: #da190b;
+        }
+        
+        button.secondary {
+            background-color: #1976d2;
+        }
+        
+        button.secondary:hover {
+            background-color: #2196f3;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #0f3460;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #0f9fa5;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #1ab0b9;
+        }
+        
+        /* Numerics section in status */
+        .numerics {
+            background-color: #1a1a2e;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            border: 1px solid #0f9fa5;
+        }
+        
+        .numeric-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+        
+        .numeric-label {
+            color: #b0bec5;
+        }
+        
+        .numeric-value {
+            color: #80deea;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <header>
+            <h1>🚜 Агро-Навігація</h1>
+            <div class="mode-badge gnss" id="modeBadge">GNSS RTK</div>
+            <div class="time-display">
+                Час: <span id="timeDisplay">00:00</span>
+            </div>
+        </header>
+        
+        <div id="mapContainer">
+            <div id="map"></div>
+        </div>
+        
+        <div id="statusContainer">
+            <h3 style="margin-bottom: 15px; color: #80deea;">Статус сенсорів</h3>
+            
+            <div class="sensor-card gnss-fixed" id="gnssCard">
+                <h4>GNSS</h4>
+                <div class="sensor-info">
+                    Режим: <span class="sensor-info-value" id="gnssMode">RTK Fixed</span><br/>
+                    Супутники: <span class="sensor-info-value" id="gnsssatellites">12</span><br/>
+                    SNR: <span class="sensor-info-value" id="gnssSnr">45 дБГц</span><br/>
+                    Якість: <span class="sensor-info-value" id="gnssQuality">100%</span>
+                </div>
+            </div>
+            
+            <div class="sensor-card">
+                <h4>IMU</h4>
+                <div class="sensor-info">
+                    Статус: <span class="sensor-info-value">Активний ✓</span><br/>
+                    Дрейф: <span class="sensor-info-value" id="imuDrift">0.05 м</span><br/>
+                    Az: <span class="sensor-info-value" id="imuAz">0.01 м/с²</span><br/>
+                    Gz: <span class="sensor-info-value" id="imuGz">0.001 рад/с</span>
+                </div>
+            </div>
+            
+            <div class="sensor-card">
+                <h4>LiDAR</h4>
+                <div class="sensor-info">
+                    Статус: <span class="sensor-info-value" id="lidarStatus">Неактивна</span><br/>
+                    Рядок смещ: <span class="sensor-info-value" id="lidarOffset">—</span><br/>
+                    Точок: <span class="sensor-info-value" id="lidarPoints">16/16</span>
+                </div>
+            </div>
+            
+            <div class="numerics">
+                <div class="numeric-item">
+                    <span class="numeric-label">Відхилення:</span>
+                    <span class="numeric-value" id="ctError">0.05 м</span>
+                </div>
+                <div class="numeric-item">
+                    <span class="numeric-label">Швидкість:</span>
+                    <span class="numeric-value" id="speed">2.5 м/с (9 км/г)</span>
+                </div>
+                <div class="numeric-item">
+                    <span class="numeric-label">Курс:</span>
+                    <span class="numeric-value" id="heading">45.0°</span>
+                </div>
+                <div class="numeric-item">
+                    <span class="numeric-label">Цикл:</span>
+                    <span class="numeric-value" id="cycleTime">0.6 мс</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="chartContainer">
+            <canvas id="deviationChart"></canvas>
+        </div>
+        
+        <div id="logContainer">
+            <div id="eventLog"></div>
+            <div class="button-group">
+                <button id="btnStart">▶ Старт</button>
+                <button id="btnPause">⏸ Пауза</button>
+                <button id="btnReset">↺ Скинути</button>
+                <button id="btnSimulateLoss" class="secondary">⚡ GPS Втрата</button>
+                <button id="btnExtendedLoss" class="secondary">🔄 Тривала (60с)</button>
+                <button id="btnHelp" class="secondary">ℹ Довідка</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // ================== Configuration ==================
+        const MAP_CENTER = [48.9500, 32.1000];
+        const FIELD_SIZE = { width: 500, height: 300 };
+        let map = null;
+        let ws = null;
+        let isPaused = false;
+        
+        // ================== Map Initialization ==================
+        function initMap() {
+            map = L.map('map').setView(MAP_CENTER, 17);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Field boundary (5 hectares, 500x300m)
+            const lat_per_m = 1 / 111320;
+            const lon_per_m = lat_per_m / Math.cos(MAP_CENTER[0] * Math.PI / 180);
+            
+            const fieldBounds = [
+                [MAP_CENTER[0], MAP_CENTER[1]],
+                [MAP_CENTER[0], MAP_CENTER[1] + FIELD_SIZE.width * lon_per_m],
+                [MAP_CENTER[0] - FIELD_SIZE.height * lat_per_m, MAP_CENTER[1] + FIELD_SIZE.width * lon_per_m],
+                [MAP_CENTER[0] - FIELD_SIZE.height * lat_per_m, MAP_CENTER[1]],
+                [MAP_CENTER[0], MAP_CENTER[1]]
+            ];
+            
+            L.polyline(fieldBounds, { color: '#4CAF50', weight: 2, opacity: 0.7 }).addTo(map);
+            
+            // Tractor marker
+            window.tractorMarker = L.circleMarker(MAP_CENTER, { 
+                radius: 8, 
+                color: '#80deea', 
+                fill: true, 
+                fillColor: '#4CAF50',
+                weight: 2
+            }).addTo(map).bindPopup('Трактор');
+            
+            // True position marker (semi-transparent)
+            window.trueMarker = L.circleMarker(MAP_CENTER, { 
+                radius: 5, 
+                color: 'rgba(255,255,255,0.3)',
+                fill: true,
+                fillColor: 'rgba(255,255,255,0.1)',
+                weight: 1
+            }).addTo(map).bindPopup('Справжня позиція');
+            
+            // Path polyline
+            window.pathLine = L.polyline([], { color: '#4FC3F7', weight: 3 }).addTo(map);
+        }
+        
+        // ================== Chart Initialization ==================
+        const chartConfig = {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Відхилення (м)',
+                        data: [],
+                        borderColor: '#FF6B35',
+                        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    },
+                    {
+                        label: 'IMU Дрейф (м)',
+                        data: [],
+                        borderColor: '#FFC107',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        fill: false,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: {
+                animation: false,
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { labels: { color: '#e8eaf6', font: { size: 11 } } }
+                },
+                scales: {
+                    x: { 
+                        ticks: { color: '#b0bec5', font: { size: 10 } },
+                        grid: { color: '#0f3460' }
+                    },
+                    y: { 
+                        ticks: { color: '#b0bec5', font: { size: 10 } },
+                        grid: { color: '#0f3460' },
+                        min: 0
+                    }
+                }
+            }
+        };
+        
+        window.deviationChart = new Chart(
+            document.getElementById('deviationChart'),
+            chartConfig
+        );
+        
+        // ================== WebSocket Connection ==================
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                document.body.style.opacity = '1';
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket closed');
+                setTimeout(connectWebSocket, 2000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onmessage = (event) => {
+                if (isPaused) return;
+                
+                const data = JSON.parse(event.data);
+                updateDisplay(data);
+            };
+        }
+        
+        // ================== Update Display ==================
+        function updateDisplay(data) {
+            // Update mode badge
+            const modeBadge = document.getElementById('modeBadge');
+            modeBadge.textContent = data.mode;
+            modeBadge.className = 'mode-badge';
+            
+            if (data.mode.includes('GNSS')) {
+                modeBadge.classList.add('gnss');
+            } else if (data.mode.includes('DEAD')) {
+                modeBadge.classList.add('dead-reckoning');
+            } else if (data.mode.includes('LIDAR')) {
+                modeBadge.classList.add('lidar');
+            } else if (data.mode.includes('SAFE')) {
+                modeBadge.classList.add('safe-stop');
+            }
+            
+            // Update map
+            const lat = data.position.lat;
+            const lon = data.position.lon;
+            window.tractorMarker.setLatLng([lat, lon]);
+            window.trueMarker.setLatLng([data.true_position.lat || lat, data.true_position.lon || lon]);
+            
+            // Update trajectory path
+            if (data.trajectory_history && data.trajectory_history.length > 0) {
+                const lat_per_m = 1 / 111320;
+                const lon_per_m = lat_per_m / Math.cos(MAP_CENTER[0] * Math.PI / 180);
+                const pathCoords = data.trajectory_history.map(([x, y]) => [
+                    MAP_CENTER[0] - y * lat_per_m,
+                    MAP_CENTER[1] + x * lon_per_m
+                ]);
+                window.pathLine.setLatLngs(pathCoords);
+            }
+            
+            // Update GNSS status
+            document.getElementById('gnssMode').textContent = data.gnss.mode || 'N/A';
+            document.getElementById('gnsssatellites').textContent = data.gnss.satellites || 0;
+            document.getElementById('gnssSnr').textContent = data.gnss.snr ? data.gnss.snr.toFixed(1) + ' дБГц' : 'N/A';
+            document.getElementById('gnssQuality').textContent = data.gnss.signal_quality ? Math.round(data.gnss.signal_quality * 100) + '%' : '0%';
+            
+            const gnssCard = document.getElementById('gnssCard');
+            gnssCard.className = 'sensor-card';
+            if (data.gnss.mode === 'RTK_FIXED') {
+                gnssCard.classList.add('gnss-fixed');
+            } else if (data.gnss.mode === 'LOST') {
+                gnssCard.classList.add('gnss-lost');
+            } else {
+                gnssCard.classList.add('gnss-degraded');
+            }
+            
+            // Update IMU
+            document.getElementById('imuDrift').textContent = data.imu.drift_error.toFixed(2) + ' м';
+            document.getElementById('imuAz').textContent = Math.sqrt(data.imu.ax**2 + data.imu.ay**2).toFixed(3) + ' м/с²';
+            document.getElementById('imuGz').textContent = data.imu.gz.toFixed(4) + ' рад/с';
+            
+            // Update LiDAR
+            document.getElementById('lidarStatus').textContent = data.lidar.active ? 'Активна ✓' : 'Неактивна';
+            document.getElementById('lidarOffset').textContent = data.lidar.row_offset !== null ? data.lidar.row_offset.toFixed(2) + ' м' : '—';
+            document.getElementById('lidarPoints').textContent = (data.lidar.scan_points || []).length + '/16';
+            
+            // Update numerics
+            document.getElementById('ctError').textContent = data.cross_track_error.toFixed(2) + ' м';
+            document.getElementById('speed').textContent = (data.position.speed * 3.6).toFixed(1) + ' км/г';
+            document.getElementById('heading').textContent = (data.position.heading_deg).toFixed(1) + '°';
+            document.getElementById('cycleTime').textContent = data.cycle_time_ms.toFixed(1) + ' мс';
+            
+            // Update time
+            const minutes = Math.floor(data.timestamp / 60);
+            const seconds = (data.timestamp % 60).toFixed(1);
+            document.getElementById('timeDisplay').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            
+            // Update chart
+            updateChart(data.timestamp, data.cross_track_error, data.imu.drift_error);
+            
+            // Update events
+            updateEventLog(data.event_log);
+        }
+        
+        function updateChart(timestamp, cte, driftError) {
+            const chart = window.deviationChart;
+            const timeStr = (timestamp / 60).toFixed(1);
+            
+            // Keep only last 100 seconds
+            if (chart.data.labels.length > 100) {
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+                chart.data.datasets[1].data.shift();
+            }
+            
+            chart.data.labels.push(timeStr);
+            chart.data.datasets[0].data.push(cte);
+            chart.data.datasets[1].data.push(driftError);
+            chart.update('none');
+        }
+        
+        function updateEventLog(events) {
+            const logDiv = document.getElementById('eventLog');
+            const lastEvents = (events || []).slice(-10);
+            
+            logDiv.innerHTML = lastEvents.map(event => `
+                <div class="event-item event-${event.level.toLowerCase()}">
+                    <span class="event-time">[${event.simulation_time.toFixed(1)}s]</span>
+                    ${event.message}
+                </div>
+            `).join('');
+            
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        // ================== Button Handlers ==================
+        document.getElementById('btnStart').onclick = () => {
+            isPaused = false;
+            ws.send(JSON.stringify({ action: 'resume' }));
+        };
+        
+        document.getElementById('btnPause').onclick = () => {
+            isPaused = true;
+            ws.send(JSON.stringify({ action: 'pause' }));
+        };
+        
+        document.getElementById('btnReset').onclick = () => {
+            window.deviationChart.data.labels = [];
+            window.deviationChart.data.datasets[0].data = [];
+            window.deviationChart.data.datasets[1].data = [];
+            window.deviationChart.update();
+            document.getElementById('eventLog').innerHTML = '';
+            window.pathLine.setLatLngs([]);
+            isPaused = false;
+            ws.send(JSON.stringify({ action: 'reset' }));
+        };
+        
+        document.getElementById('btnSimulateLoss').onclick = () => {
+            ws.send(JSON.stringify({ action: 'scenario', name: 'gnss_loss' }));
+        };
+        
+        document.getElementById('btnExtendedLoss').onclick = () => {
+            ws.send(JSON.stringify({ action: 'scenario', name: 'extended_loss' }));
+        };
+        
+        document.getElementById('btnHelp').onclick = () => {
+            alert('Агро-Навігація: Демонстрація системи автоматичної навігації агротехніки\n\n' +
+                  'Режими:\n' +
+                  '🟢 GNSS RTK - точні координати RTK\n' +
+                  '🟡 Dead Reckoning - позиція без GPS (до 30с)\n' +
+                  '🟠 LiDAR NAV - корекція за LiDAR рядками\n' +
+                  '🔴 Safe Stop - аварійна зупинка (помилка > 2м)\n\n' +
+                  'Кнопки:\n' +
+                  '⚡ GPS Втрата - 10-15 секунд без сигналу\n' +
+                  '🔄 Тривала - 60 секунд тривалої втрати\n');
+        };
+        
+        // ================== Initialization ==================
+        window.addEventListener('load', () => {
+            initMap();
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html>
