@@ -1,6 +1,6 @@
 """
-Configuration for Agro Navigation System.
-All runtime parameters are centralized for easy tuning.
+Конфігурація системи навігації агротехніки
+Всі параметри в одному місці — легко змінювати для тестування
 """
 from dataclasses import dataclass
 

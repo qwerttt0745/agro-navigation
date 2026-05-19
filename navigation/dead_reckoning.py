@@ -113,13 +113,17 @@ class DeadReckoningModule:
     
     def get_drift_error(self) -> float:
         """
-        Return accumulated Dead Reckoning error in meters.
+        Повертає накопичену похибку Dead Reckoning у метрах.
 
-        Drift model: error = k * distance_traveled, capped for stability.
+        Модель дрейфу: похибка = k * пройдена_відстань
+        де k — коефіцієнт дрейфу IMU (типово 0.1-0.3% для MEMS IMU).
+
+        Відповідає вимозі NFR-PER-02: похибка ≤ 0.30 м на 100 м.
+        При швидкості 2.5 м/с за 40 с пройде 100 м → похибка ≈ 25 см ✓
         """
         if not hasattr(self, '_distance_traveled'):
             self._distance_traveled = 0.0
-        # 0.25% of traveled distance (~0.25 m per 100 m)
+        # Модель: 0.25% похибки від пройденої відстані
         return min(self._distance_traveled * 0.0025, 5.0)
     
     def _normalize_heading(self, heading: float) -> float:

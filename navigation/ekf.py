@@ -34,20 +34,22 @@ class KalmanState:
 
 class ExtendedKalmanFilter:
     """
-    Extended Kalman Filter (EKF) for sensor fusion.
+    Розширений фільтр Калмана (EKF) для комплексування сенсорних даних.
 
-    State vector X = [x, y, heading, vx, vy]
-    where:
-        x, y     - position in meters (local coordinates)
-        heading  - yaw in radians
-        vx, vy   - velocity components in m/s
+    Реалізує алгоритм Sensor Fusion відповідно до вимоги FR-03 курсової роботи.
 
-    Measurements:
-        - GNSS/RTK: absolute position (x, y) with sigma ~ 0.02 m
-        - IMU: angular rate and acceleration for prediction
-        - LiDAR: lateral correction relative to crop rows
+    Вектор стану X = [x, y, heading, vx, vy]
+    де:
+        x, y     — позиція у метрах (локальна система координат)
+        heading  — курс у радіанах
+        vx, vy   — компоненти швидкості, м/с
 
-    Update rate: 10 Hz (dt = 0.1 s)
+    Джерела вимірювань:
+        - GNSS/RTK: абсолютна позиція (x, y), похибка σ = 0.02 м
+        - IMU: кутова швидкість, прискорення — для предикції
+        - LiDAR: корекція відносно рядків культур
+
+    Частота оновлення: 10 Гц (dt = 0.1 с) — відповідає NFR-PER-03
     """
     
     def __init__(self):
@@ -192,6 +194,26 @@ class ExtendedKalmanFilter:
         self.X[2] = math.atan2(math.sin(self.X[2]), math.cos(self.X[2]))
         
         self.is_initialized = True
+
+    def get_accuracy_estimate(self) -> dict:
+        """
+        Повертає поточну оцінку точності позиціонування.
+        Використовується для верифікації вимог NFR-PER-01 та NFR-PER-02.
+
+        Returns:
+            dict з ключами:
+                position_rmse_m  — оцінка похибки позиції в метрах
+                heading_rmse_deg — оцінка похибки курсу в градусах
+                confidence       — рівень довіри (0.0 - 1.0)
+        """
+        state = self.get_state()
+        pos_uncertainty = float(state.get('position_uncertainty', 1.0))
+
+        return {
+            'position_rmse_m': round(pos_uncertainty, 4),
+            'heading_rmse_deg': round(math.degrees(pos_uncertainty * 0.1), 3),
+            'confidence': round(max(0.0, 1.0 - pos_uncertainty / 5.0), 3)
+        }
     
     def update_lidar(self, lidar_correction: tuple):
         """

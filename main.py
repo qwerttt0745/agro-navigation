@@ -1,6 +1,6 @@
 """
-Agro Navigation System - Main server
-Diploma project: Navigation software for agricultural machinery
+Agro Navigation System — Головний сервер
+Дипломна робота: Розробка ПЗ системи навігації агротехніки
 """
 import asyncio
 import json
@@ -8,15 +8,15 @@ import logging
 import logging.handlers
 from pathlib import Path
 from datetime import datetime
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from navigation.nav_controller import NavigationController
 from config import settings
 
-# Logging
+# ── Логування ──────────────────────────────────────────────────────────────
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 
@@ -35,30 +35,31 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# FastAPI
-app = FastAPI(
-    title="Система навігації агротехніки",
-    description="Мультисенсорна навігація з Sensor Fusion (EKF)",
-    version="1.0.0"
-)
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Simulation state
-nav_controller: NavigationController | None = None
-simulation_running = False
-simulation_paused = False
-connected_clients: list[WebSocket] = []
-
-
-@app.on_event("startup")
-async def startup():
+# ── FastAPI ─────────────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global nav_controller
     nav_controller = NavigationController()
     nav_controller.initialize()
     logger.info("=" * 60)
-    logger.info("Navigation system started")
-    logger.info(f"Version: {app.version}")
+    logger.info("Система навігації агротехніки — ЗАПУЩЕНО")
+    logger.info(f"Версія: {app.version}")
     logger.info("=" * 60)
+    yield
+
+
+app = FastAPI(
+    title="Система навігації агротехніки",
+    description="Програмне забезпечення мультисенсорної навігації з Sensor Fusion (EKF)",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# ── Стан симуляції ──────────────────────────────────────────────────────────
+nav_controller: NavigationController | None = None
+simulation_running = False
+simulation_paused = False
+connected_clients: list[WebSocket] = []
 
 
 @app.get("/")
@@ -68,9 +69,9 @@ async def root():
 
 @app.get("/api/status")
 async def get_status():
-    """Current system status"""
+    """Поточний стан системи"""
     if not nav_controller:
-        return {"error": "Controller not initialized"}
+        return {"error": "Контролер не ініціалізований"}
     return {
         "running": simulation_running,
         "paused": simulation_paused,
@@ -82,9 +83,9 @@ async def get_status():
 
 @app.get("/api/report")
 async def get_report():
-    """Session report for diploma logging"""
+    """Звіт про виконану роботу (для логування у дипломній)"""
     if not nav_controller:
-        return {"error": "No data"}
+        return {"error": "Немає даних"}
     return nav_controller.generate_session_report()
 
 
@@ -94,7 +95,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     await websocket.accept()
     connected_clients.append(websocket)
-    logger.info(f"Client connected. Total: {len(connected_clients)}")
+    logger.info(f"Клієнт підключився. Всього: {len(connected_clients)}")
 
     try:
         while True:
@@ -116,43 +117,43 @@ async def websocket_endpoint(websocket: WebSocket):
                     for dead in dead_clients:
                         connected_clients.remove(dead)
                 except Exception as e:
-                    logger.error(f"Simulation step error: {e}", exc_info=True)
+                    logger.error(f"Помилка кроку симуляції: {e}", exc_info=True)
 
             await asyncio.sleep(settings.DT)
 
     except WebSocketDisconnect:
-        logger.info("Client disconnected")
+        logger.info("Клієнт відключився")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}", exc_info=True)
+        logger.error(f"WebSocket помилка: {e}", exc_info=True)
     finally:
         if websocket in connected_clients:
             connected_clients.remove(websocket)
 
 
 async def _handle_command(cmd: dict, websocket: WebSocket):
-    """Handle client commands"""
+    """Обробка команд від клієнта"""
     global simulation_running, simulation_paused
     action = cmd.get("action")
 
     if action == "start":
         simulation_running = True
         simulation_paused = False
-        logger.info("Simulation STARTED")
+        logger.info("▶ Симуляцію ЗАПУЩЕНО")
         await websocket.send_json({"status": "started"})
 
     elif action == "pause":
         simulation_paused = True
-        logger.info("Simulation PAUSED")
+        logger.info("⏸ Симуляцію ПРИЗУПИНЕНО")
         await websocket.send_json({"status": "paused"})
 
     elif action == "resume":
         simulation_paused = False
-        logger.info("Simulation RESUMED")
+        logger.info("▶ Симуляцію ВІДНОВЛЕНО")
         await websocket.send_json({"status": "resumed"})
 
     elif action == "stop":
         simulation_running = False
-        logger.info("Simulation STOPPED")
+        logger.info("⏹ Симуляцію ЗУПИНЕНО")
         await websocket.send_json({"status": "stopped"})
 
     elif action == "reset":
@@ -160,18 +161,18 @@ async def _handle_command(cmd: dict, websocket: WebSocket):
         simulation_paused = False
         if nav_controller:
             nav_controller.reset()
-        logger.info("Simulation RESET")
+        logger.info("↺ Симуляцію СКИНУТО")
         await websocket.send_json({"status": "reset"})
 
     elif action == "scenario":
         name = cmd.get("name", "gnss_loss")
         if nav_controller:
             nav_controller.trigger_scenario(name)
-        logger.info(f"Scenario triggered: {name}")
+        logger.info(f"⚡ Сценарій запущено: {name}")
         await websocket.send_json({"status": f"scenario_{name}_triggered"})
 
     else:
-        await websocket.send_json({"error": f"Unknown action: {action}"})
+        await websocket.send_json({"error": f"Невідома команда: {action}"})
 
 
 if __name__ == "__main__":

@@ -421,8 +421,8 @@
                 <h4>GNSS</h4>
                 <div class="sensor-info">
                     Режим: <span class="sensor-info-value" id="gnssMode">RTK Fixed</span><br/>
-                    Супутники: <span class="sensor-info-value" id="gnsssatellites">12</span><br/>
-                    SNR: <span class="sensor-info-value" id="gnssSnr">45 дБГц</span><br/>
+                    Супутники: <span class="sensor-info-value" id="gnssSat">12</span><br/>
+                    SNR: <span class="sensor-info-value" id="gnssSNR">45 дБГц</span><br/>
                     Якість: <span class="sensor-info-value" id="gnssQuality">100%</span>
                 </div>
             </div>
@@ -550,7 +550,10 @@
         let isPaused = false;
         let lastTimestamp = null;
         const shownEvents = new Set();
-        const trajectoryPoints = [];
+        let trajectoryLine = null;
+        let trueTrajectoryLine = null;
+        let trajectoryPoints = [];
+        let trueTrajectoryPoints = [];
         const modeDurations = {
             GNSS_RTK: 0,
             DEAD_RECKONING: 0,
@@ -608,7 +611,8 @@
             }).addTo(map).bindPopup('Справжня позиція');
             
             // Path polyline
-            window.pathLine = L.polyline([], { color: '#4FC3F7', weight: 3 }).addTo(map);
+            trajectoryLine = L.polyline([], { color: '#4FC3F7', weight: 3 }).addTo(map);
+            trueTrajectoryLine = L.polyline([], { color: 'rgba(255,255,255,0.4)', weight: 2 }).addTo(map);
         }
         
         // ================== Chart Initialization ==================
@@ -666,20 +670,15 @@
         
         // ================== WebSocket Connection ==================
         function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            ws = new WebSocket(`ws://${window.location.host}/ws`);
 
             ws.onopen = () => {
-                console.log('WebSocket connected');
+                console.log('WebSocket підключено');
                 addEvent('SYSTEM', 'Підключено до сервера навігації');
-                if (reconnectTimer) {
-                    clearTimeout(reconnectTimer);
-                    reconnectTimer = null;
-                }
+                clearTimeout(reconnectTimer);
             };
 
             ws.onmessage = (event) => {
-                if (isPaused) return;
                 const data = JSON.parse(event.data);
                 if (data.status) return;
                 updateUI(data);
@@ -690,9 +689,7 @@
                 reconnectTimer = setTimeout(connectWebSocket, 2000);
             };
 
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
+            ws.onerror = (err) => console.error('WebSocket помилка:', err);
         }
         
         // ================== Update Display ==================
@@ -719,9 +716,8 @@
             document.getElementById('speed').textContent = `${speedKmh} км/г (${speedMs.toFixed(1)} м/с)`;
 
             const cte = data.cross_track_error;
-            const cteCm = (cte * 100).toFixed(1);
             const cteEl = document.getElementById('cte');
-            cteEl.textContent = `${cteCm} см`;
+            cteEl.textContent = (cte * 100).toFixed(1) + ' см';
             cteEl.style.color =
                 Math.abs(cte) < 0.05 ? '#4CAF50' :
                 Math.abs(cte) < 0.15 ? '#FFC107' : '#f44336';
@@ -730,8 +726,8 @@
             document.getElementById('accuracy').textContent = (uncertainty * 100).toFixed(1) + ' см';
 
             document.getElementById('gnssMode').textContent = data.gnss.mode;
-            document.getElementById('gnsssatellites').textContent = data.gnss.satellites;
-            document.getElementById('gnssSnr').textContent = data.gnss.snr.toFixed(1) + ' дБГц';
+            document.getElementById('gnssSat').textContent = data.gnss.satellites;
+            document.getElementById('gnssSNR').textContent = data.gnss.snr.toFixed(1) + ' дБГц';
             document.getElementById('gnssQuality').textContent = Math.round(data.gnss.signal_quality * 100) + '%';
             document.getElementById('gnssSnrPanel').textContent = data.gnss.snr.toFixed(1) + ' дБГц';
             document.getElementById('gnssSatPanel').textContent = data.gnss.satellites;
@@ -754,7 +750,15 @@
 
             trajectoryPoints.push([lat, lon]);
             if (trajectoryPoints.length > 500) trajectoryPoints.shift();
-            window.pathLine.setLatLngs(trajectoryPoints);
+            if (trajectoryLine) trajectoryLine.setLatLngs(trajectoryPoints);
+
+            if (data.true_position) {
+                const trueLat = BASE_LAT + data.true_position.y * LAT_PER_M;
+                const trueLon = BASE_LON + data.true_position.x * LON_PER_M;
+                trueTrajectoryPoints.push([trueLat, trueLon]);
+                if (trueTrajectoryPoints.length > 500) trueTrajectoryPoints.shift();
+                if (trueTrajectoryLine) trueTrajectoryLine.setLatLngs(trueTrajectoryPoints);
+            }
 
             document.getElementById('steeringAngle').textContent =
                 (data.position.steering_angle_deg ?? 0).toFixed(1) + '°';
@@ -791,20 +795,27 @@
             return classes[mode] || '';
         }
         
-        function updateChart(data) {
-            const chart = window.errorChart;
-            const timeStr = data.timestamp.toFixed(1) + 'с';
+        let chartLabels = [];
+        let chartCTE = [];
+        let chartDrift = [];
+        const MAX_CHART_POINTS = 100;
 
-            if (chart.data.labels.length > 100) {
-                chart.data.labels.shift();
-                chart.data.datasets[0].data.shift();
-                chart.data.datasets[1].data.shift();
+        function updateChart(data) {
+            const t = data.timestamp.toFixed(1) + 'с';
+            chartLabels.push(t);
+            chartCTE.push((data.cross_track_error * 100).toFixed(2));
+            chartDrift.push((data.imu.drift_error * 100).toFixed(2));
+
+            if (chartLabels.length > MAX_CHART_POINTS) {
+                chartLabels.shift();
+                chartCTE.shift();
+                chartDrift.shift();
             }
 
-            chart.data.labels.push(timeStr);
-            chart.data.datasets[0].data.push(Number((data.cross_track_error * 100).toFixed(2)));
-            chart.data.datasets[1].data.push(Number((data.imu.drift_error * 100).toFixed(2)));
-            chart.update('none');
+            window.errorChart.data.labels = chartLabels;
+            window.errorChart.data.datasets[0].data = chartCTE;
+            window.errorChart.data.datasets[1].data = chartDrift;
+            window.errorChart.update('none');
         }
         
         function addEvent(level, message) {
@@ -841,51 +852,36 @@
         
         // ================== Button Handlers ==================
         document.getElementById('btnStart').onclick = () => {
-            isPaused = false;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: 'start' }));
-            }
+            ws?.send(JSON.stringify({ action: 'start' }));
             addEvent('INFO', 'Симуляцію запущено');
         };
-        
+
         document.getElementById('btnPause').onclick = () => {
-            isPaused = true;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: 'pause' }));
-            }
+            ws?.send(JSON.stringify({ action: 'pause' }));
             addEvent('INFO', 'Симуляцію призупинено');
         };
-        
-        document.getElementById('btnReset').onclick = () => {
-            window.errorChart.data.labels = [];
-            window.errorChart.data.datasets[0].data = [];
-            window.errorChart.data.datasets[1].data = [];
-            window.errorChart.update('none');
-            document.getElementById('eventLog').innerHTML = '';
-            window.pathLine.setLatLngs([]);
-            trajectoryPoints.length = 0;
-            isPaused = false;
-            lastTimestamp = null;
-            modeDurations.GNSS_RTK = 0;
-            modeDurations.DEAD_RECKONING = 0;
-            modeDurations.LIDAR_NAV = 0;
-            modeDurations.SAFE_STOP = 0;
-            document.getElementById('timerGnss').textContent = '0.0s';
-            document.getElementById('timerDr').textContent = '0.0s';
-            document.getElementById('timerLidar').textContent = '0.0s';
-            document.getElementById('timerSafe').textContent = '0.0s';
 
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ action: 'reset' }));
-            }
+        document.getElementById('btnReset').onclick = () => {
+            ws?.send(JSON.stringify({ action: 'reset' }));
+            trajectoryPoints = [];
+            trueTrajectoryPoints = [];
+            if (trajectoryLine) trajectoryLine.setLatLngs([]);
+            if (trueTrajectoryLine) trueTrajectoryLine.setLatLngs([]);
+            document.getElementById('eventLog').innerHTML = '';
+            chartLabels = [];
+            chartCTE = [];
+            chartDrift = [];
+            window.errorChart.data.labels = [];
+            window.errorChart.data.datasets.forEach(d => d.data = []);
+            window.errorChart.update('none');
             addEvent('INFO', 'Симуляцію скинуто');
         };
-        
+
         document.getElementById('btnSimulateLoss').onclick = () => {
             ws?.send(JSON.stringify({ action: 'scenario', name: 'gnss_loss' }));
             addEvent('WARNING', '⚡ Ініційована коротка втрата GPS (10 с)');
         };
-        
+
         document.getElementById('btnExtendedLoss').onclick = () => {
             ws?.send(JSON.stringify({ action: 'scenario', name: 'extended_loss' }));
             addEvent('WARNING', '🔄 Ініційована тривала втрата GPS (60 с) — тест LiDAR режиму');

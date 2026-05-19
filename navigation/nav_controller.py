@@ -92,10 +92,10 @@ class NavigationController:
 
     def reset(self):
         """
-        Full system reset to initial state.
-        Satisfies NFR-REL-02: recovery after failure.
+        Повне скидання системи до початкового стану.
+        Відповідає вимозі NFR-REL-02: відновлення після збою.
         """
-        # Recreate all components
+        # Перестворюємо всі компоненти з нуля
         self.vehicle = TractorModel()
         self.gnss = GNSSSimulator()
         self.imu = IMUSimulator()
@@ -103,7 +103,7 @@ class NavigationController:
         self.dead_reckoning = DeadReckoningModule()
         self.ekf = ExtendedKalmanFilter()
 
-        # Reset state trackers
+        # Скидаємо лічильники та стан
         self.mode = OperationMode.INITIALIZING
         self.gnss_lost_timer = 0.0
         self.lidar_active_timer = 0.0
@@ -119,9 +119,10 @@ class NavigationController:
         self.active_scenario = None
         self.scenario_start_time = 0.0
 
+        # Ініціалізуємо заново
         self.initialize()
-        self.log_event("INFO", "System fully reset to initial state")
-        self.logger.info("NavigationController RESET completed")
+        self.log_event("INFO", "Система повністю скинута до початкового стану")
+        self.logger.info("↺ NavigationController RESET виконано")
 
     def step(self, dt: float) -> Dict:
         """
@@ -209,60 +210,71 @@ class NavigationController:
         return telemetry
 
     def _update_navigation_mode(self, gnss_data, imu_data, dt, lidar_data):
-        """Update operation mode based on sensor availability and timers"""
-        if gnss_data is not None and gnss_data.mode in [GNSSMode.RTK_FIXED, GNSSMode.RTK_FLOAT]:
-            # GNSS available
+        """
+        Update operation mode based on sensor availability and timers.
+        Mode transitions (FR-02, FR-04, FR-05):
+          GNSS_RTK → DEAD_RECKONING  : on first GNSS loss
+          DEAD_RECKONING → LIDAR_NAV : after 30s without GNSS
+          LIDAR_NAV → SAFE_STOP      : if drift error > 30cm
+          any → GNSS_RTK             : on GNSS recovery
+        """
+        gnss_available = (
+            gnss_data is not None
+            and gnss_data.mode in [GNSSMode.RTK_FIXED, GNSSMode.RTK_FLOAT]
+        )
+
+        if gnss_available:
+            # ── GNSS is available ────────────────────────────────────────
             self.gnss_lost_timer = 0.0
             if self.mode != OperationMode.GNSS_RTK:
                 self.mode = OperationMode.GNSS_RTK
-                self.log_event("INFO", "GNSS RTK active - mode switched to GNSS_RTK")
+                self.log_event("INFO", "GNSS відновлено — повернення до режиму GNSS_RTK")
         else:
-            # GNSS lost
+            # ── GNSS is lost / degraded ──────────────────────────────────
             self.gnss_lost_timer += dt
 
-            if self.gnss_lost_timer < max(0.1, settings.DR_ACTIVATION_DELAY + 0.1):
-                # First loss detected
-                if self.mode == OperationMode.GNSS_RTK:
-                    self.mode = OperationMode.DEAD_RECKONING
-                    self.dead_reckoning.activate(
-                        self.vehicle.x,
-                        self.vehicle.y,
-                        self.vehicle.heading
+            # Step 1: Immediate switch to Dead Reckoning (FR-04)
+            if self.mode == OperationMode.GNSS_RTK:
+                self.mode = OperationMode.DEAD_RECKONING
+                self.dead_reckoning.activate(
+                    self.vehicle.x,
+                    self.vehicle.y,
+                    self.vehicle.heading
+                )
+                self.log_event(
+                    "WARNING",
+                    f"Втрата GNSS [{gnss_data.mode.value if gnss_data else 'LOST'}]. "
+                    f"Активовано Dead Reckoning (IMU)"
+                )
+
+            # Step 2: After 30s — activate LiDAR navigation (FR-05)
+            elif (self.mode == OperationMode.DEAD_RECKONING
+                  and self.gnss_lost_timer >= settings.LIDAR_ACTIVATION_DELAY):
+                lidar_offset = self.lidar.detect_row_offset(lidar_data)
+                self.mode = OperationMode.LIDAR_NAV
+                self.lidar_active_timer = 0.0
+                if lidar_offset is not None:
+                    self.log_event(
+                        "WARNING",
+                        f"Dead Reckoning > {settings.LIDAR_ACTIVATION_DELAY:.0f}s. "
+                        f"Активовано LiDAR навігацію (зміщення рядка: {lidar_offset:.2f}м)"
                     )
-                    self.log_event("WARNING", "GNSS signal lost. Switching to Dead Reckoning (IMU)")
+                else:
+                    self.log_event(
+                        "WARNING",
+                        f"Dead Reckoning > {settings.LIDAR_ACTIVATION_DELAY:.0f}s. "
+                        "Активовано LiDAR навігацію (очікування корекції)"
+                    )
 
-            elif self.gnss_lost_timer >= settings.LIDAR_ACTIVATION_DELAY:
-                # 30 seconds without GNSS - activate LiDAR
-                if self.mode == OperationMode.DEAD_RECKONING:
-                    lidar_offset = self.lidar.detect_row_offset(lidar_data)
-                    if lidar_offset is not None:
-                        self.mode = OperationMode.LIDAR_NAV
-                        self.lidar_active_timer = 0.0
-                        self.log_event(
-                            "WARNING",
-                            f"Dead Reckoning >30s. Activating LiDAR navigation (offset: {lidar_offset:.2f}m)"
-                        )
-                    else:
-                        # Check if drift is too large
-                        if self.dead_reckoning.get_drift_error() > settings.MAX_DR_ERROR:
-                            self.mode = OperationMode.SAFE_STOP
-                            self.vehicle.speed = 0.0
-                            self.log_event(
-                                "CRITICAL",
-                                f"Position error exceeded {settings.MAX_DR_ERROR:.2f}m. Safe Stop activated."
-                            )
-
-            # LiDAR navigation active
+            # Step 3: LiDAR mode — monitor drift (BR-01)
             if self.mode == OperationMode.LIDAR_NAV:
                 self.lidar_active_timer += dt
-
-                # Check if should exit LiDAR nav
                 if self.dead_reckoning.get_drift_error() > settings.MAX_DR_ERROR:
                     self.mode = OperationMode.SAFE_STOP
                     self.vehicle.speed = 0.0
                     self.log_event(
                         "CRITICAL",
-                        f"Position error in LiDAR mode exceeded {settings.MAX_DR_ERROR:.2f}m. Safe Stop!"
+                        f"LiDAR режим: похибка перевищила {settings.MAX_DR_ERROR}м. Safe Stop!"
                     )
 
     def _calculate_cross_track_error(self, ekf_state: Dict):
