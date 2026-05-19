@@ -7,6 +7,8 @@ from enum import Enum
 from dataclasses import dataclass
 from typing import Optional
 
+from config import settings
+
 
 class GNSSMode(Enum):
     """GNSS signal mode"""
@@ -33,7 +35,7 @@ class GNSSSimulator:
     Simulates GNSS/RTK receiver with realistic noise and signal loss scenarios
     """
     
-    def __init__(self, base_lat: float = 48.9500, base_lon: float = 32.1000):
+    def __init__(self, base_lat: float = settings.BASE_LAT, base_lon: float = settings.BASE_LON):
         """
         Args:
             base_lat: Base latitude of field center

@@ -96,10 +96,16 @@ class TractorModel:
         dy = wp.y - self.y
         target_heading = math.atan2(dy, dx)
         
-        # Check if reached waypoint (within 2 meters)
+        # Check if reached waypoint (within 5 meters)
         distance = math.sqrt(dx**2 + dy**2)
-        if distance < 2.0:
+        if distance < 5.0:
             self.current_waypoint_idx += 1
+            if self.current_waypoint_idx >= len(self.waypoints):
+                self.current_waypoint_idx = 0
+            wp = self.waypoints[self.current_waypoint_idx]
+            dx = wp.x - self.x
+            dy = wp.y - self.y
+            target_heading = math.atan2(dy, dx)
         
         return target_heading
     

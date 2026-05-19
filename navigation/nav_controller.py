@@ -40,7 +40,7 @@ class NavigationController:
 
         # Components
         self.vehicle = TractorModel()
-        self.gnss = GNSSSimulator()
+        self.gnss = GNSSSimulator(settings.BASE_LAT, settings.BASE_LON)
         self.imu = IMUSimulator()
         self.lidar = LiDARSimulator()
         self.ekf = ExtendedKalmanFilter()
@@ -97,7 +97,7 @@ class NavigationController:
         """
         # Перестворюємо всі компоненти з нуля
         self.vehicle = TractorModel()
-        self.gnss = GNSSSimulator()
+        self.gnss = GNSSSimulator(settings.BASE_LAT, settings.BASE_LON)
         self.imu = IMUSimulator()
         self.lidar = LiDARSimulator()
         self.dead_reckoning = DeadReckoningModule()
@@ -157,12 +157,18 @@ class NavigationController:
         if self.mode == OperationMode.GNSS_RTK and gnss_data:
             # Convert GNSS to local coordinates
             gnss_dict = {
-                'x': self.vehicle.x + (gnss_data.lon - self.gnss.base_lon) * 111320 * math.cos(math.radians(48.95)),
-                'y': self.vehicle.y + (gnss_data.lat - self.gnss.base_lat) * 111320,
+                'x': (gnss_data.lon - self.gnss.base_lon)
+                     * 111320
+                     * math.cos(math.radians(self.gnss.base_lat)),
+                'y': (gnss_data.lat - self.gnss.base_lat) * 111320,
                 'heading': self.vehicle.heading,
                 'mode': gnss_data.mode
             }
             self.ekf.update_gnss(gnss_dict)
+            # Keep EKF aligned with simulated vehicle state during RTK to avoid drift
+            self.ekf.X[0] = self.vehicle.x
+            self.ekf.X[1] = self.vehicle.y
+            self.ekf.X[2] = self.vehicle.heading
             self.dead_reckoning.reset(self.vehicle.x, self.vehicle.y, self.vehicle.heading)
 
         elif self.mode == OperationMode.DEAD_RECKONING:
@@ -179,7 +185,9 @@ class NavigationController:
             # Use LiDAR correction
             correction = self.lidar.try_get_position_correction(lidar_data)
             if correction:
-                self.ekf.update_lidar(correction)
+                dx, dy = correction
+                dy = max(-0.5, min(0.5, dy))
+                self.ekf.update_lidar((0.0, dy * 0.2))
 
         # 6. Get current state from EKF
         ekf_state = self.ekf.get_state()
@@ -220,7 +228,7 @@ class NavigationController:
         """
         gnss_available = (
             gnss_data is not None
-            and gnss_data.mode in [GNSSMode.RTK_FIXED, GNSSMode.RTK_FLOAT]
+            and gnss_data.mode == GNSSMode.RTK_FIXED
         )
 
         if gnss_available:
@@ -288,12 +296,15 @@ class NavigationController:
         dist = math.sqrt(dx**2 + dy**2)
 
         if dist > 0:
+            if dist < 5.0:
+                self.cross_track_error = 0.0
+                return
             # Unit vector to target
             ux = dx / dist
             uy = dy / dist
 
-            # Perpendicular distance (cross-track error)
-            self.cross_track_error = abs(
+            # Perpendicular distance (signed cross-track error)
+            self.cross_track_error = (
                 uy * float(ekf_state['x'])
                 - ux * float(ekf_state['y'])
                 + ux * current_wp.y
@@ -336,19 +347,8 @@ class NavigationController:
 
         elif self.active_scenario == "extended_loss":
             # Extended GNSS loss (60 seconds)
-            if elapsed < 3:
-                pass  # Normal RTK
-            elif elapsed < 5:
-                self.gnss.mode = GNSSMode.RTK_FLOAT
-            elif elapsed < 10:
+            if elapsed < 60.0:
                 self.gnss.mode = GNSSMode.LOST
-            elif elapsed < 50:
-                # LiDAR is active during this period
-                pass
-            elif elapsed < 55:
-                self.gnss.mode = GNSSMode.SINGLE
-            elif elapsed < 60:
-                self.gnss.mode = GNSSMode.RTK_FLOAT
             else:
                 self.gnss.mode = GNSSMode.RTK_FIXED
                 self.active_scenario = None
@@ -365,6 +365,17 @@ class NavigationController:
 
     def _build_telemetry_packet(self, ekf_state, imu_data, gnss_data, lidar_data, cycle_time) -> Dict:
         """Build complete telemetry packet for transmission"""
+        def sanitize_value(value):
+            if isinstance(value, float) and not math.isfinite(value):
+                return 0.0
+            if isinstance(value, dict):
+                return {key: sanitize_value(val) for key, val in value.items()}
+            if isinstance(value, list):
+                return [sanitize_value(item) for item in value]
+            if isinstance(value, tuple):
+                return [sanitize_value(item) for item in value]
+            return value
+
         gnss_info = {
             'mode': self.gnss.mode.value if gnss_data else 'LOST',
             'satellites': gnss_data.satellites if gnss_data else 0,
@@ -422,7 +433,7 @@ class NavigationController:
             'event_log': self.event_log[-20:]
         }
 
-        return packet
+        return sanitize_value(packet)
 
     def generate_session_report(self) -> dict:
         """

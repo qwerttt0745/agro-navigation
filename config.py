@@ -24,8 +24,8 @@ class Settings:
     VEHICLE_WHEELBASE: float = 2.8
 
     # GNSS
-    BASE_LAT: float = 48.9500
-    BASE_LON: float = 32.1000
+    BASE_LAT: float = 47.4100
+    BASE_LON: float = 35.9180
     RTK_ACCURACY: float = 0.02
     SNR_THRESHOLD: float = 35.0
 

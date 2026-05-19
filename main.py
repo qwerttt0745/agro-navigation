@@ -111,8 +111,9 @@ async def websocket_endpoint(websocket: WebSocket):
                     dead_clients = []
                     for client in connected_clients:
                         try:
-                            await client.send_json(telemetry, default=str)
-                        except Exception:
+                            await client.send_text(json.dumps(telemetry, default=str))
+                        except Exception as e:
+                            logger.error(f"WebSocket send failed: {e}", exc_info=True)
                             dead_clients.append(client)
                     for dead in dead_clients:
                         connected_clients.remove(dead)
@@ -139,22 +140,22 @@ async def _handle_command(cmd: dict, websocket: WebSocket):
         simulation_running = True
         simulation_paused = False
         logger.info("▶ Симуляцію ЗАПУЩЕНО")
-        await websocket.send_json({"status": "started"})
+        await websocket.send_text(json.dumps({"status": "started"}))
 
     elif action == "pause":
         simulation_paused = True
         logger.info("⏸ Симуляцію ПРИЗУПИНЕНО")
-        await websocket.send_json({"status": "paused"})
+        await websocket.send_text(json.dumps({"status": "paused"}))
 
     elif action == "resume":
         simulation_paused = False
         logger.info("▶ Симуляцію ВІДНОВЛЕНО")
-        await websocket.send_json({"status": "resumed"})
+        await websocket.send_text(json.dumps({"status": "resumed"}))
 
     elif action == "stop":
         simulation_running = False
         logger.info("⏹ Симуляцію ЗУПИНЕНО")
-        await websocket.send_json({"status": "stopped"})
+        await websocket.send_text(json.dumps({"status": "stopped"}))
 
     elif action == "reset":
         simulation_running = False
@@ -162,17 +163,17 @@ async def _handle_command(cmd: dict, websocket: WebSocket):
         if nav_controller:
             nav_controller.reset()
         logger.info("↺ Симуляцію СКИНУТО")
-        await websocket.send_json({"status": "reset"})
+        await websocket.send_text(json.dumps({"status": "reset"}))
 
     elif action == "scenario":
         name = cmd.get("name", "gnss_loss")
         if nav_controller:
             nav_controller.trigger_scenario(name)
         logger.info(f"⚡ Сценарій запущено: {name}")
-        await websocket.send_json({"status": f"scenario_{name}_triggered"})
+        await websocket.send_text(json.dumps({"status": f"scenario_{name}_triggered"}))
 
     else:
-        await websocket.send_json({"error": f"Невідома команда: {action}"})
+        await websocket.send_text(json.dumps({"error": f"Невідома команда: {action}"}))
 
 
 if __name__ == "__main__":
