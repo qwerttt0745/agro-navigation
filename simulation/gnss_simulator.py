@@ -61,6 +61,9 @@ class GNSSSimulator:
         
         self.scenario_active = False
         self.scenario_start_time = 0.0
+        self._scenario_name = None
+        self._scenario_duration = 0.0
+        self._time = 0.0
     
     def _lat_lon_to_local(self, lat: float, lon: float) -> tuple:
         """Convert lat/lon to local x, y coordinates"""
@@ -112,6 +115,10 @@ class GNSSSimulator:
         Returns:
             GNSSData with noisy measurement, or None if signal lost
         """
+        self._time += 0.1
+        if self.scenario_active:
+            self.update_mode_for_scenario(self._time - self.scenario_start_time)
+
         if self.mode == GNSSMode.LOST:
             return None
         
@@ -152,10 +159,40 @@ class GNSSSimulator:
         """Start the signal loss scenario"""
         self.scenario_active = True
         self.scenario_start_time = start_time
+        self._scenario_name = "gnss_loss"
+        self._scenario_duration = 60.0
+
+    def trigger_scenario(self, scenario_name: str, duration: float = 60.0):
+        """
+        Start GNSS degradation scenario.
+
+        Scenarios:
+            'gnss_loss'     - short loss (10 s)
+            'extended_loss' - long loss (60 s)
+            'reb_attack'    - jamming simulation (90 s)
+        """
+        self._scenario_name = scenario_name
+        self._scenario_start = self._time
+        self._scenario_duration = duration
+        self.scenario_active = True
+        self.scenario_start_time = self._time
+
+        if scenario_name == 'gnss_loss':
+            self._scenario_duration = 10.0
+        elif scenario_name == 'extended_loss':
+            self._scenario_duration = 60.0
+        elif scenario_name == 'reb_attack':
+            self._scenario_duration = 90.0
     
     def update_mode_for_scenario(self, elapsed_time: float):
         """Update GNSS mode based on scenario timeline"""
         if not self.scenario_active:
+            return
+
+        if self._scenario_duration and elapsed_time >= self._scenario_duration:
+            self.scenario_active = False
+            self.mode = GNSSMode.RTK_FIXED
+            self.signal_quality = 1.0
             return
         
         # Find the appropriate mode based on elapsed time

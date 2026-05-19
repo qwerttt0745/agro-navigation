@@ -22,6 +22,7 @@ class DeadReckoningModule:
         
         self.drift_error = 0.0  # Accumulated position error
         self.distance_traveled = 0.0
+        self._distance_traveled = 0.0
         
         self.active = False
     
@@ -42,6 +43,7 @@ class DeadReckoningModule:
         
         self.drift_error = 0.0
         self.distance_traveled = 0.0
+        self._distance_traveled = 0.0
         self.active = True
     
     def deactivate(self):
@@ -78,6 +80,7 @@ class DeadReckoningModule:
         # Update distance traveled
         distance_step = math.sqrt(dx**2 + dy**2)
         self.distance_traveled += distance_step
+        self._distance_traveled += distance_step
         
         # Update drift error if true position is provided
         if true_x is not None and true_y is not None:
@@ -98,6 +101,7 @@ class DeadReckoningModule:
         self.estimated_heading = heading
         self.drift_error = 0.0
         self.distance_traveled = 0.0
+        self._distance_traveled = 0.0
     
     def get_position(self) -> tuple:
         """
@@ -108,9 +112,16 @@ class DeadReckoningModule:
         return (self.estimated_x, self.estimated_y, self.estimated_heading)
     
     def get_drift_error(self) -> float:
-        \"\"\"Get accumulated position error in meters\"\"\"
-        return self.drift_error
+        """
+        Return accumulated Dead Reckoning error in meters.
+
+        Drift model: error = k * distance_traveled, capped for stability.
+        """
+        if not hasattr(self, '_distance_traveled'):
+            self._distance_traveled = 0.0
+        # 0.25% of traveled distance (~0.25 m per 100 m)
+        return min(self._distance_traveled * 0.0025, 5.0)
     
     def _normalize_heading(self, heading: float) -> float:
-        \"\"\"Normalize heading to [-pi, pi] range\"\"\"
+        """Normalize heading to [-pi, pi] range"""
         return math.atan2(math.sin(heading), math.cos(heading))

@@ -1,55 +1,65 @@
-# Agro Navigation System
+# 🚜 Система навігації агротехніки
 
-Advanced GNSS/IMU/LiDAR sensor fusion navigation system for agricultural machinery with real-time fault tolerance and mode switching.
+**Дипломна робота**
+Тема: «Розробка програмного забезпечення системи навігації агротехніки в умовах нестабільного супутникового зв'язку»
 
-## Features
+## Опис системи
+Це програмне забезпечення моделює мультисенсорну навігацію для агротехніки на полі з нестабільним GNSS. Система перемикається між режимами GNSS_RTK, DEAD_RECKONING, LIDAR_NAV та SAFE_STOP на основі якості сигналу і накопиченої похибки.
 
-- **Extended Kalman Filter (EKF)** for 9-dimensional state estimation
-- **GNSS Signal Loss Detection** with automatic fallback to Dead Reckoning
-- **Dead Reckoning Module** for autonomous positioning via IMU integration
-- **LiDAR SLAM** for terrain-based navigation in GNSS-denied areas
-- **Real-time Mode Switching**: GNSS_FIXED → DEAD_RECKONING → LIDAR_NAV → SAFE_STOP
-- **Interactive WebSocket-based Dashboard** with live position tracking
-- **Comprehensive Sensor Simulators** for GNSS, IMU, LiDAR, and vehicle dynamics
-- **Full Test Suite** with pytest
+## Ключові можливості
+- Sensor Fusion на базі EKF (GNSS + IMU + LiDAR)
+- Автоматичне перемикання режимів навігації
+- Веб-інтерфейс з картою, графіками і телеметрією в реальному часі
+- Логування сесій у файл
+- Автоматизовані тести вимог
 
-## Quick Start
+## Швидкий старт
 
-### 1. Install Dependencies
+### 1. Встановлення залежностей
 
 ```bash
 cd Agro-Navigation
 pip install -r requirements.txt
 ```
 
-### 2. Run the Server
+### 2. Запуск сервера
 
 ```bash
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+python main.py
 ```
 
-### 3. Open Dashboard
+### 3. Відкрити панель
 
-Visit http://localhost:8000 in your browser
+Перейдіть у браузер: http://localhost:8000
 
-### 4. Run Tests
+### 4. Запуск тестів
 
 ```bash
 pytest
 ```
 
-## Operation Modes
+## Режими роботи
 
-| Mode | Duration | Description |
-|------|----------|-------------|
-| GNSS_FIXED | 0-30s | Primary navigation with full accuracy |
-| DEAD_RECKONING | 30-120s | IMU-based positioning |
-| LIDAR_NAV | 30-120s | Terrain-based SLAM navigation |
-| SAFE_STOP | >120s | Emergency stop mode |
+| Режим | Опис |
+|------|------|
+| GNSS_RTK | Основна навігація з точністю RTK (±2 см) |
+| DEAD_RECKONING | Автономне позиціонування за IMU |
+| LIDAR_NAV | Корекція LiDAR при тривалій втраті GNSS |
+| SAFE_STOP | Аварійна зупинка при перевищенні порогів |
 
-## Performance Specifications
+## Вимоги продуктивності
+- Частота симуляції: 10 Гц
+- Затримка обробки: < 50 мс
+- RTK точність: ±2 см
+- DR похибка: ≤ 30 см на 100 м
 
-- Navigation Cycle: 10 Hz (100 ms)
-- End-to-end Latency: < 50 ms
-- GNSS Accuracy: ±2 cm (RTK)
-- Dead Reckoning Accuracy: ≤ 30 cm per 100 m
+## Структура проєкту
+```
+Agro-Navigation/
+├── main.py
+├── config.py
+├── navigation/
+├── simulation/
+├── static/
+└── tests/
+```

@@ -34,8 +34,20 @@ class KalmanState:
 
 class ExtendedKalmanFilter:
     """
-    Extended Kalman Filter for sensor fusion
-    State vector: [x, y, heading, vx, vy] (5 dimensions)
+    Extended Kalman Filter (EKF) for sensor fusion.
+
+    State vector X = [x, y, heading, vx, vy]
+    where:
+        x, y     - position in meters (local coordinates)
+        heading  - yaw in radians
+        vx, vy   - velocity components in m/s
+
+    Measurements:
+        - GNSS/RTK: absolute position (x, y) with sigma ~ 0.02 m
+        - IMU: angular rate and acceleration for prediction
+        - LiDAR: lateral correction relative to crop rows
+
+    Update rate: 10 Hz (dt = 0.1 s)
     """
     
     def __init__(self):
@@ -126,6 +138,8 @@ class ExtendedKalmanFilter:
         Args:
             gnss_data: Dictionary with 'x', 'y', 'heading' keys (or 'lat', 'lon', 'alt')
         """
+        if gnss_data.get('is_fixed') is False:
+            return
         # Convert lat/lon to local if needed
         if 'lat' in gnss_data and 'lon' in gnss_data:
             x_meas = gnss_data.get('x', gnss_data.get('local_x', 0.0))
@@ -225,6 +239,25 @@ class ExtendedKalmanFilter:
             'heading_uncertainty': float(np.sqrt(self.P[2, 2]))
         }
         return state_dict
+
+    def get_accuracy_estimate(self) -> dict:
+        """
+        Return current positioning accuracy estimate.
+
+        Returns:
+            dict with keys:
+                position_rmse_m  - position error estimate in meters
+                heading_rmse_deg - heading error estimate in degrees
+                confidence       - confidence level (0.0 to 1.0)
+        """
+        state = self.get_state()
+        pos_uncertainty = float(state.get('position_uncertainty', 1.0))
+
+        return {
+            'position_rmse_m': round(pos_uncertainty, 4),
+            'heading_rmse_deg': round(math.degrees(pos_uncertainty * 0.1), 3),
+            'confidence': round(max(0.0, 1.0 - pos_uncertainty / 5.0), 3)
+        }
     
     def get_state_object(self) -> KalmanState:
         """Get current state as KalmanState object"""

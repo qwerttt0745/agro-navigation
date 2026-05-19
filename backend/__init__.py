@@ -1,1 +1,0 @@
-"""Agro Navigation System Backend"""

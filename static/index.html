@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Агро-Навігація - Система навігації агротехніки</title>
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap" />
     
     <!-- Leaflet.js for map -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -22,7 +24,7 @@
         body {
             background-color: #1a1a2e;
             color: #e8eaf6;
-            font-family: 'Roboto', 'Segoe UI', sans-serif;
+            font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
             overflow: hidden;
             height: 100vh;
         }
@@ -316,13 +318,93 @@
             color: #80deea;
             font-weight: 600;
         }
+
+        .course-panel {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 5px;
+            background: #0f2b4a;
+            border: 1px solid #1b4a6a;
+        }
+
+        .course-panel h4 {
+            font-size: 13px;
+            color: #c5e1a5;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .req-text {
+            font-size: 12px;
+            color: #e8eaf6;
+            line-height: 1.5;
+            padding: 6px 8px;
+            border-left: 3px solid #7cb342;
+            background: rgba(124, 179, 66, 0.1);
+            border-radius: 3px;
+            margin-bottom: 10px;
+        }
+
+        .mode-timers {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+
+        .timer-item {
+            background: rgba(15, 159, 165, 0.08);
+            border: 1px solid rgba(15, 159, 165, 0.25);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .timer-item span:last-child {
+            color: #80deea;
+            font-weight: 600;
+        }
+
+        .quality-row {
+            font-size: 12px;
+            color: #b0bec5;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .quality-value {
+            color: #e8eaf6;
+            font-weight: 600;
+        }
+
+        .error-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-top: 6px;
+        }
+
+        .error-table th,
+        .error-table td {
+            padding: 4px 6px;
+            border-bottom: 1px solid rgba(128, 222, 234, 0.2);
+            text-align: left;
+        }
+
+        .error-table th {
+            color: #80deea;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <header>
             <h1>🚜 Агро-Навігація</h1>
-            <div class="mode-badge gnss" id="modeBadge">GNSS RTK</div>
+            <div class="mode-badge gnss" id="navMode">GNSS RTK</div>
             <div class="time-display">
                 Час: <span id="timeDisplay">00:00</span>
             </div>
@@ -367,20 +449,69 @@
             <div class="numerics">
                 <div class="numeric-item">
                     <span class="numeric-label">Відхилення:</span>
-                    <span class="numeric-value" id="ctError">0.05 м</span>
+                    <span class="numeric-value" id="cte">0.0 см</span>
+                </div>
+                <div class="numeric-item">
+                    <span class="numeric-label">X:</span>
+                    <span class="numeric-value" id="posX">0.00 м</span>
+                </div>
+                <div class="numeric-item">
+                    <span class="numeric-label">Y:</span>
+                    <span class="numeric-value" id="posY">0.00 м</span>
                 </div>
                 <div class="numeric-item">
                     <span class="numeric-label">Швидкість:</span>
                     <span class="numeric-value" id="speed">2.5 м/с (9 км/г)</span>
                 </div>
                 <div class="numeric-item">
+                    <span class="numeric-label">Точність:</span>
+                    <span class="numeric-value" id="accuracy">2.0 см</span>
+                </div>
+                <div class="numeric-item">
                     <span class="numeric-label">Курс:</span>
                     <span class="numeric-value" id="heading">45.0°</span>
+                </div>
+                <div class="numeric-item">
+                    <span class="numeric-label">Кут керма:</span>
+                    <span class="numeric-value" id="steeringAngle">0.0°</span>
                 </div>
                 <div class="numeric-item">
                     <span class="numeric-label">Цикл:</span>
                     <span class="numeric-value" id="cycleTime">0.6 мс</span>
                 </div>
+            </div>
+
+            <div class="course-panel">
+                <h4>Вимоги та метрики</h4>
+                <div class="req-text" id="requirementText">FR-01: Обробка GNSS | NFR-PER-01: точність ±2 см</div>
+
+                <div class="mode-timers">
+                    <div class="timer-item"><span>GNSS_RTK</span><span id="timerGnss">0.0s</span></div>
+                    <div class="timer-item"><span>DEAD_RECKONING</span><span id="timerDr">0.0s</span></div>
+                    <div class="timer-item"><span>LIDAR_NAV</span><span id="timerLidar">0.0s</span></div>
+                    <div class="timer-item"><span>SAFE_STOP</span><span id="timerSafe">0.0s</span></div>
+                </div>
+
+                <div class="quality-row">
+                    <span>GNSS SNR</span><span class="quality-value" id="gnssSnrPanel">-- дБГц</span>
+                </div>
+                <div class="quality-row">
+                    <span>Супутники</span><span class="quality-value" id="gnssSatPanel">0</span>
+                </div>
+
+                <table class="error-table">
+                    <thead>
+                        <tr>
+                            <th>Режим</th>
+                            <th>Похибка (м)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>GNSS</td><td id="errGnss">0.02</td></tr>
+                        <tr><td>DR</td><td id="errDr">0.00</td></tr>
+                        <tr><td>LiDAR</td><td id="errLidar">0.00</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
         
@@ -403,11 +534,39 @@
     
     <script>
         // ================== Configuration ==================
-        const MAP_CENTER = [48.9500, 32.1000];
+        const BASE_LAT = 48.9500;
+        const BASE_LON = 32.1000;
+        const LAT_PER_M = 1 / 111320;
+        const LON_PER_M = 1 / (111320 * Math.cos(BASE_LAT * Math.PI / 180));
+        const FIELD_ORIGIN = { x: 50, y: 50 };
         const FIELD_SIZE = { width: 500, height: 300 };
+        const MAP_CENTER = [
+            BASE_LAT + (FIELD_ORIGIN.y + FIELD_SIZE.height / 2) * LAT_PER_M,
+            BASE_LON + (FIELD_ORIGIN.x + FIELD_SIZE.width / 2) * LON_PER_M
+        ];
         let map = null;
         let ws = null;
+        let reconnectTimer = null;
         let isPaused = false;
+        let lastTimestamp = null;
+        const shownEvents = new Set();
+        const trajectoryPoints = [];
+        const modeDurations = {
+            GNSS_RTK: 0,
+            DEAD_RECKONING: 0,
+            LIDAR_NAV: 0,
+            SAFE_STOP: 0
+        };
+        const requirementMap = {
+            GNSS_RTK: 'FR-01: Обробка GNSS | NFR-PER-01: точність ±2 см',
+            DEAD_RECKONING: 'FR-04: Автономне позиціонування (Dead Reckoning)',
+            LIDAR_NAV: 'FR-05: Локальна навігація LiDAR/SLAM',
+            SAFE_STOP: 'BR-01: Мінімізація простоїв'
+        };
+
+        function xyToLatLng(x, y) {
+            return [BASE_LAT + y * LAT_PER_M, BASE_LON + x * LON_PER_M];
+        }
         
         // ================== Map Initialization ==================
         function initMap() {
@@ -417,22 +576,21 @@
                 maxZoom: 19
             }).addTo(map);
             
-            // Field boundary (5 hectares, 500x300m)
-            const lat_per_m = 1 / 111320;
-            const lon_per_m = lat_per_m / Math.cos(MAP_CENTER[0] * Math.PI / 180);
-            
+            // Field boundary (500x300m) with local origin offset
             const fieldBounds = [
-                [MAP_CENTER[0], MAP_CENTER[1]],
-                [MAP_CENTER[0], MAP_CENTER[1] + FIELD_SIZE.width * lon_per_m],
-                [MAP_CENTER[0] - FIELD_SIZE.height * lat_per_m, MAP_CENTER[1] + FIELD_SIZE.width * lon_per_m],
-                [MAP_CENTER[0] - FIELD_SIZE.height * lat_per_m, MAP_CENTER[1]],
-                [MAP_CENTER[0], MAP_CENTER[1]]
+                xyToLatLng(FIELD_ORIGIN.x, FIELD_ORIGIN.y),
+                xyToLatLng(FIELD_ORIGIN.x + FIELD_SIZE.width, FIELD_ORIGIN.y),
+                xyToLatLng(FIELD_ORIGIN.x + FIELD_SIZE.width, FIELD_ORIGIN.y + FIELD_SIZE.height),
+                xyToLatLng(FIELD_ORIGIN.x, FIELD_ORIGIN.y + FIELD_SIZE.height),
+                xyToLatLng(FIELD_ORIGIN.x, FIELD_ORIGIN.y)
             ];
             
             L.polyline(fieldBounds, { color: '#4CAF50', weight: 2, opacity: 0.7 }).addTo(map);
             
+            const startLatLng = xyToLatLng(FIELD_ORIGIN.x, FIELD_ORIGIN.y);
+
             // Tractor marker
-            window.tractorMarker = L.circleMarker(MAP_CENTER, { 
+            window.tractorMarker = L.circleMarker(startLatLng, { 
                 radius: 8, 
                 color: '#80deea', 
                 fill: true, 
@@ -441,7 +599,7 @@
             }).addTo(map).bindPopup('Трактор');
             
             // True position marker (semi-transparent)
-            window.trueMarker = L.circleMarker(MAP_CENTER, { 
+            window.trueMarker = L.circleMarker(startLatLng, { 
                 radius: 5, 
                 color: 'rgba(255,255,255,0.3)',
                 fill: true,
@@ -460,21 +618,21 @@
                 labels: [],
                 datasets: [
                     {
-                        label: 'Відхилення (м)',
+                        label: 'Відхилення від курсу (см)',
                         data: [],
-                        borderColor: '#FF6B35',
-                        backgroundColor: 'rgba(255, 107, 53, 0.1)',
+                        borderColor: '#FF9800',
+                        backgroundColor: 'rgba(255, 152, 0, 0.08)',
                         borderWidth: 2,
-                        fill: true,
+                        pointRadius: 0,
                         tension: 0.3
                     },
                     {
-                        label: 'IMU Дрейф (м)',
+                        label: 'Дрейф IMU (см)',
                         data: [],
                         borderColor: '#FFC107',
-                        backgroundColor: 'transparent',
-                        borderWidth: 2,
-                        fill: false,
+                        borderWidth: 1,
+                        pointRadius: 0,
+                        borderDash: [5, 5],
                         tension: 0.3
                     }
                 ]
@@ -488,19 +646,20 @@
                 },
                 scales: {
                     x: { 
-                        ticks: { color: '#b0bec5', font: { size: 10 } },
-                        grid: { color: '#0f3460' }
+                        ticks: { color: '#b0bec5', maxTicksLimit: 8 },
+                        grid: { color: '#0f3460' },
+                        title: { display: true, text: 'Час (с)', color: '#b0bec5' }
                     },
                     y: { 
-                        ticks: { color: '#b0bec5', font: { size: 10 } },
+                        ticks: { color: '#b0bec5' },
                         grid: { color: '#0f3460' },
-                        min: 0
+                        title: { display: true, text: 'Похибка (см)', color: '#b0bec5' }
                     }
                 }
             }
         };
         
-        window.deviationChart = new Chart(
+        window.errorChart = new Chart(
             document.getElementById('deviationChart'),
             chartConfig
         );
@@ -509,69 +668,76 @@
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-            
+
             ws.onopen = () => {
                 console.log('WebSocket connected');
-                document.body.style.opacity = '1';
+                addEvent('SYSTEM', 'Підключено до сервера навігації');
+                if (reconnectTimer) {
+                    clearTimeout(reconnectTimer);
+                    reconnectTimer = null;
+                }
             };
-            
-            ws.onclose = () => {
-                console.log('WebSocket closed');
-                setTimeout(connectWebSocket, 2000);
-            };
-            
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-            };
-            
+
             ws.onmessage = (event) => {
                 if (isPaused) return;
-                
                 const data = JSON.parse(event.data);
-                updateDisplay(data);
+                if (data.status) return;
+                updateUI(data);
+            };
+
+            ws.onclose = () => {
+                addEvent('SYSTEM', "З'єднання розірвано. Перепідключення...");
+                reconnectTimer = setTimeout(connectWebSocket, 2000);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
             };
         }
         
         // ================== Update Display ==================
-        function updateDisplay(data) {
-            // Update mode badge
-            const modeBadge = document.getElementById('modeBadge');
+        function updateUI(data) {
+            if (!data || !data.position) return;
+
+            const modeBadge = document.getElementById('navMode');
             modeBadge.textContent = data.mode;
-            modeBadge.className = 'mode-badge';
-            
-            if (data.mode.includes('GNSS')) {
-                modeBadge.classList.add('gnss');
-            } else if (data.mode.includes('DEAD')) {
-                modeBadge.classList.add('dead-reckoning');
-            } else if (data.mode.includes('LIDAR')) {
-                modeBadge.classList.add('lidar');
-            } else if (data.mode.includes('SAFE')) {
-                modeBadge.classList.add('safe-stop');
+            modeBadge.className = 'mode-badge ' + getModeClass(data.mode);
+
+            if (typeof data.timestamp === 'number') {
+                updateModeTimers(data.mode, data.timestamp);
             }
-            
-            // Update map
-            const lat = data.position.lat;
-            const lon = data.position.lon;
-            window.tractorMarker.setLatLng([lat, lon]);
-            window.trueMarker.setLatLng([data.true_position.lat || lat, data.true_position.lon || lon]);
-            
-            // Update trajectory path
-            if (data.trajectory_history && data.trajectory_history.length > 0) {
-                const lat_per_m = 1 / 111320;
-                const lon_per_m = lat_per_m / Math.cos(MAP_CENTER[0] * Math.PI / 180);
-                const pathCoords = data.trajectory_history.map(([x, y]) => [
-                    MAP_CENTER[0] - y * lat_per_m,
-                    MAP_CENTER[1] + x * lon_per_m
-                ]);
-                window.pathLine.setLatLngs(pathCoords);
-            }
-            
-            // Update GNSS status
-            document.getElementById('gnssMode').textContent = data.gnss.mode || 'N/A';
-            document.getElementById('gnsssatellites').textContent = data.gnss.satellites || 0;
-            document.getElementById('gnssSnr').textContent = data.gnss.snr ? data.gnss.snr.toFixed(1) + ' дБГц' : 'N/A';
-            document.getElementById('gnssQuality').textContent = data.gnss.signal_quality ? Math.round(data.gnss.signal_quality * 100) + '%' : '0%';
-            
+
+            document.getElementById('requirementText').textContent =
+                requirementMap[data.mode] || 'FR-01: Обробка GNSS | NFR-PER-01: точність ±2 см';
+
+            document.getElementById('posX').textContent = data.position.x.toFixed(2) + ' м';
+            document.getElementById('posY').textContent = data.position.y.toFixed(2) + ' м';
+            document.getElementById('heading').textContent = data.position.heading_deg.toFixed(1) + '°';
+
+            const speedMs = data.position.speed;
+            const speedKmh = (speedMs * 3.6).toFixed(1);
+            document.getElementById('speed').textContent = `${speedKmh} км/г (${speedMs.toFixed(1)} м/с)`;
+
+            const cte = data.cross_track_error;
+            const cteCm = (cte * 100).toFixed(1);
+            const cteEl = document.getElementById('cte');
+            cteEl.textContent = `${cteCm} см`;
+            cteEl.style.color =
+                Math.abs(cte) < 0.05 ? '#4CAF50' :
+                Math.abs(cte) < 0.15 ? '#FFC107' : '#f44336';
+
+            const uncertainty = data.position.position_uncertainty;
+            document.getElementById('accuracy').textContent = (uncertainty * 100).toFixed(1) + ' см';
+
+            document.getElementById('gnssMode').textContent = data.gnss.mode;
+            document.getElementById('gnsssatellites').textContent = data.gnss.satellites;
+            document.getElementById('gnssSnr').textContent = data.gnss.snr.toFixed(1) + ' дБГц';
+            document.getElementById('gnssQuality').textContent = Math.round(data.gnss.signal_quality * 100) + '%';
+            document.getElementById('gnssSnrPanel').textContent = data.gnss.snr.toFixed(1) + ' дБГц';
+            document.getElementById('gnssSatPanel').textContent = data.gnss.satellites;
+
+            document.getElementById('imuDrift').textContent = data.imu.drift_error.toFixed(4) + ' м';
+
             const gnssCard = document.getElementById('gnssCard');
             gnssCard.className = 'sensor-card';
             if (data.gnss.mode === 'RTK_FIXED') {
@@ -581,94 +747,148 @@
             } else {
                 gnssCard.classList.add('gnss-degraded');
             }
-            
-            // Update IMU
-            document.getElementById('imuDrift').textContent = data.imu.drift_error.toFixed(2) + ' м';
-            document.getElementById('imuAz').textContent = Math.sqrt(data.imu.ax**2 + data.imu.ay**2).toFixed(3) + ' м/с²';
-            document.getElementById('imuGz').textContent = data.imu.gz.toFixed(4) + ' рад/с';
-            
-            // Update LiDAR
-            document.getElementById('lidarStatus').textContent = data.lidar.active ? 'Активна ✓' : 'Неактивна';
-            document.getElementById('lidarOffset').textContent = data.lidar.row_offset !== null ? data.lidar.row_offset.toFixed(2) + ' м' : '—';
-            document.getElementById('lidarPoints').textContent = (data.lidar.scan_points || []).length + '/16';
-            
-            // Update numerics
-            document.getElementById('ctError').textContent = data.cross_track_error.toFixed(2) + ' м';
-            document.getElementById('speed').textContent = (data.position.speed * 3.6).toFixed(1) + ' км/г';
-            document.getElementById('heading').textContent = (data.position.heading_deg).toFixed(1) + '°';
+
+            const lat = data.position.lat;
+            const lon = data.position.lon;
+            window.tractorMarker.setLatLng([lat, lon]);
+
+            trajectoryPoints.push([lat, lon]);
+            if (trajectoryPoints.length > 500) trajectoryPoints.shift();
+            window.pathLine.setLatLngs(trajectoryPoints);
+
+            document.getElementById('steeringAngle').textContent =
+                (data.position.steering_angle_deg ?? 0).toFixed(1) + '°';
             document.getElementById('cycleTime').textContent = data.cycle_time_ms.toFixed(1) + ' мс';
-            
-            // Update time
+
+            document.getElementById('errGnss').textContent = '0.02';
+            document.getElementById('errDr').textContent = data.imu.drift_error.toFixed(2);
+            document.getElementById('errLidar').textContent = Math.max(data.imu.drift_error * 0.4, 0.05).toFixed(2);
+
             const minutes = Math.floor(data.timestamp / 60);
             const seconds = (data.timestamp % 60).toFixed(1);
             document.getElementById('timeDisplay').textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-            
-            // Update chart
-            updateChart(data.timestamp, data.cross_track_error, data.imu.drift_error);
-            
-            // Update events
-            updateEventLog(data.event_log);
+
+            updateChart(data);
+
+            if (data.event_log && data.event_log.length > 0) {
+                data.event_log.slice(-3).forEach(evt => {
+                    if (!shownEvents.has(evt.timestamp)) {
+                        shownEvents.add(evt.timestamp);
+                        addEvent(evt.level, evt.message);
+                    }
+                });
+            }
+        }
+
+        function getModeClass(mode) {
+            const classes = {
+                'GNSS_RTK': 'gnss',
+                'DEAD_RECKONING': 'dead-reckoning',
+                'LIDAR_NAV': 'lidar',
+                'SAFE_STOP': 'safe-stop',
+                'INITIALIZING': 'initializing'
+            };
+            return classes[mode] || '';
         }
         
-        function updateChart(timestamp, cte, driftError) {
-            const chart = window.deviationChart;
-            const timeStr = (timestamp / 60).toFixed(1);
-            
-            // Keep only last 100 seconds
+        function updateChart(data) {
+            const chart = window.errorChart;
+            const timeStr = data.timestamp.toFixed(1) + 'с';
+
             if (chart.data.labels.length > 100) {
                 chart.data.labels.shift();
                 chart.data.datasets[0].data.shift();
                 chart.data.datasets[1].data.shift();
             }
-            
+
             chart.data.labels.push(timeStr);
-            chart.data.datasets[0].data.push(cte);
-            chart.data.datasets[1].data.push(driftError);
+            chart.data.datasets[0].data.push(Number((data.cross_track_error * 100).toFixed(2)));
+            chart.data.datasets[1].data.push(Number((data.imu.drift_error * 100).toFixed(2)));
             chart.update('none');
         }
         
-        function updateEventLog(events) {
+        function addEvent(level, message) {
             const logDiv = document.getElementById('eventLog');
-            const lastEvents = (events || []).slice(-10);
-            
-            logDiv.innerHTML = lastEvents.map(event => `
-                <div class="event-item event-${event.level.toLowerCase()}">
-                    <span class="event-time">[${event.simulation_time.toFixed(1)}s]</span>
-                    ${event.message}
-                </div>
-            `).join('');
-            
+            const levelLower = String(level || 'info').toLowerCase();
+            const levelClass = ['info', 'warning', 'critical'].includes(levelLower)
+                ? levelLower
+                : 'info';
+            const time = new Date().toLocaleTimeString();
+            const item = document.createElement('div');
+            item.className = `event-item event-${levelClass}`;
+            item.innerHTML = `<span class="event-time">[${time}]</span> ${message}`;
+            logDiv.appendChild(item);
             logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateModeTimers(mode, timestamp) {
+            if (lastTimestamp === null) {
+                lastTimestamp = timestamp;
+                return;
+            }
+
+            const delta = Math.max(0, timestamp - lastTimestamp);
+            if (modeDurations[mode] !== undefined) {
+                modeDurations[mode] += delta;
+            }
+            lastTimestamp = timestamp;
+
+            document.getElementById('timerGnss').textContent = modeDurations.GNSS_RTK.toFixed(1) + 's';
+            document.getElementById('timerDr').textContent = modeDurations.DEAD_RECKONING.toFixed(1) + 's';
+            document.getElementById('timerLidar').textContent = modeDurations.LIDAR_NAV.toFixed(1) + 's';
+            document.getElementById('timerSafe').textContent = modeDurations.SAFE_STOP.toFixed(1) + 's';
         }
         
         // ================== Button Handlers ==================
         document.getElementById('btnStart').onclick = () => {
             isPaused = false;
-            ws.send(JSON.stringify({ action: 'resume' }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'start' }));
+            }
+            addEvent('INFO', 'Симуляцію запущено');
         };
         
         document.getElementById('btnPause').onclick = () => {
             isPaused = true;
-            ws.send(JSON.stringify({ action: 'pause' }));
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'pause' }));
+            }
+            addEvent('INFO', 'Симуляцію призупинено');
         };
         
         document.getElementById('btnReset').onclick = () => {
-            window.deviationChart.data.labels = [];
-            window.deviationChart.data.datasets[0].data = [];
-            window.deviationChart.data.datasets[1].data = [];
-            window.deviationChart.update();
+            window.errorChart.data.labels = [];
+            window.errorChart.data.datasets[0].data = [];
+            window.errorChart.data.datasets[1].data = [];
+            window.errorChart.update('none');
             document.getElementById('eventLog').innerHTML = '';
             window.pathLine.setLatLngs([]);
+            trajectoryPoints.length = 0;
             isPaused = false;
-            ws.send(JSON.stringify({ action: 'reset' }));
+            lastTimestamp = null;
+            modeDurations.GNSS_RTK = 0;
+            modeDurations.DEAD_RECKONING = 0;
+            modeDurations.LIDAR_NAV = 0;
+            modeDurations.SAFE_STOP = 0;
+            document.getElementById('timerGnss').textContent = '0.0s';
+            document.getElementById('timerDr').textContent = '0.0s';
+            document.getElementById('timerLidar').textContent = '0.0s';
+            document.getElementById('timerSafe').textContent = '0.0s';
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ action: 'reset' }));
+            }
+            addEvent('INFO', 'Симуляцію скинуто');
         };
         
         document.getElementById('btnSimulateLoss').onclick = () => {
-            ws.send(JSON.stringify({ action: 'scenario', name: 'gnss_loss' }));
+            ws?.send(JSON.stringify({ action: 'scenario', name: 'gnss_loss' }));
+            addEvent('WARNING', '⚡ Ініційована коротка втрата GPS (10 с)');
         };
         
         document.getElementById('btnExtendedLoss').onclick = () => {
-            ws.send(JSON.stringify({ action: 'scenario', name: 'extended_loss' }));
+            ws?.send(JSON.stringify({ action: 'scenario', name: 'extended_loss' }));
+            addEvent('WARNING', '🔄 Ініційована тривала втрата GPS (60 с) — тест LiDAR режиму');
         };
         
         document.getElementById('btnHelp').onclick = () => {
