@@ -1,94 +1,133 @@
-# 🚜 Система навігації агротехніки
+# 🚜 AgriNav — Система навігації агротехніки
 
-**Дипломна робота**  
-Тема: «Розробка програмного забезпечення системи навігації агротехніки в умовах нестабільного супутникового зв'язку»
+**Курсовий проєкт** | Дисципліна: Проєктування інформаційних систем
+**Університет**: КНЕУ ім. Вадима Гетьмана | **Група**: ІН-403 | **2025 р.**
+**Студент**: Лопушанський Віталій Олександрович
+**Керівник**: д.т.н. Артемчук Володимир Олександрович
 
-## Опис системи
+---
 
-Програмне забезпечення реалізує мультисенсорну навігаційну систему для сільськогосподарської техніки, яка забезпечує безперервне позиціонування при деградації або повній втраті сигналу GNSS.
+## Про проєкт
 
-### Режими навігації
+Програмна реалізація мультисенсорної навігаційної системи для сільськогосподарської техніки. Система забезпечує безперервне позиціонування при деградації або повній втраті GNSS-сигналу (в тому числі від засобів РЕБ) через послідовне перемикання між трьома навігаційними режимами без зупинки техніки.
 
-| Режим | Умова активації | Точність | Колір |
-|-------|----------------|----------|-------|
-| GNSS_RTK | GNSS доступний | ±2 см | 🟢 Зелений |
-| DEAD_RECKONING | Втрата GNSS 0-30 с | ±15 см | 🟡 Жовтий |
-| LIDAR_NAV | Втрата GNSS >30 с | ±20 см | 🟠 Помаранчевий |
-| SAFE_STOP | Похибка >30 см | — | 🔴 Червоний |
+Архітектура реалізована відповідно до курсової роботи «Проєктування архітектури системи навігації агротехніки в умовах нестабільного супутникового зв'язку».
 
-### Алгоритм Sensor Fusion
+---
 
-Система використовує Розширений фільтр Калмана (EKF) для комплексування даних:
-- **GNSS/RTK**: абсолютна позиція, σ = 2 см
-- **IMU (MEMS)**: кутова швидкість 100-400 Гц, дрейф <10°/год
-- **LiDAR**: корекція за рядками культур, дальність 150 м
+## Режими навігації
+
+| Режим | Умова активації | Точність | Індикатор |
+|-------|----------------|----------|-----------|
+| `GNSS_RTK` | RTK Fixed, SNR > 35 дБГц | ±2 см | 🟢 |
+| `DEAD_RECKONING` | Втрата GNSS 0–30 с | ±25 см / 100 м | 🟡 |
+| `LIDAR_NAV` | Втрата GNSS > 30 с | ±20 см | 🟠 |
+| `SAFE_STOP` | Похибка > 30 см без корекції | — | 🔴 |
+
+---
+
+## Архітектура
+
+```
+Симулятори сенсорів
+├── GNSSSimulator     → RTK_FIXED / RTK_FLOAT / SINGLE / LOST
+├── IMUSimulator      → ax, ay, gz (100 Гц)
+└── LiDARSimulator    → PointCloud (16 каналів, 100 м)
+		 ↓
+NavigationController  → режим + сценарій
+		 ↓
+ExtendedKalmanFilter  → predict(IMU) + update_gnss() + update_lidar()
+		 ↓
+DeadReckoningModule   → інтеграція IMU при втраті GNSS
+		 ↓
+FastAPI WebSocket     → телеметрія 10 Гц → HMI (Leaflet + Chart.js)
+```
+
+---
 
 ## Встановлення та запуск
 
 ```bash
-# 1. Клонувати репозиторій
 git clone <url>
 cd Agro-Navigation
 
-# 2. Встановити залежності
 pip install -r requirements.txt
 
-# 3. Запустити систему
 python main.py
-
-# 4. Відкрити у браузері
-# http://localhost:8000
 ```
 
-## Запуск тестів
+Відкрити браузер: **http://localhost:8000**
+
+### Запуск тестів
 
 ```bash
-# Всі тести
 pytest tests/ -v
-
-# Тільки верифікація вимог
-pytest tests/test_requirements.py -v
-
-# З виміром покриття
-pytest tests/ --cov=navigation --cov-report=html
 ```
+
+---
 
 ## Структура проєкту
 
 ```
 Agro-Navigation/
-├── main.py                    # FastAPI сервер (точка входу)
-├── config.py                  # Конфігурація системи
+├── main.py                    # FastAPI + WebSocket сервер
+├── config.py                  # Параметри системи
 ├── navigation/
-│   ├── nav_controller.py      # Головний контролер навігації
-│   ├── ekf.py                 # Розширений фільтр Калмана (EKF)
-│   └── dead_reckoning.py      # Інерціальна навігація
+│   ├── nav_controller.py      # Оркестратор: режими, сценарії, телеметрія
+│   ├── ekf.py                 # EKF: predict + update_gnss + update_lidar
+│   └── dead_reckoning.py      # Інерціальна навігація (Dead Reckoning)
 ├── simulation/
-│   ├── vehicle.py             # Кінематична модель трактора
-│   ├── gnss_simulator.py      # Симулятор GNSS з деградацією
-│   ├── imu_simulator.py       # Симулятор IMU
-│   ├── lidar_simulator.py     # Симулятор LiDAR
-│   └── scenario.py            # Сценарії втрати сигналу
+│   ├── vehicle.py             # Кінематична модель трактора (Pure Pursuit)
+│   ├── gnss_simulator.py      # Симулятор GNSS з деградацією сигналу
+│   ├── imu_simulator.py       # Симулятор 6-DoF IMU (MEMS)
+│   └── lidar_simulator.py     # Симулятор LiDAR (16-канальний)
 ├── static/
-│   └── index.html             # Веб-інтерфейс (Leaflet + Chart.js)
+│   └── index.html             # HMI (Leaflet.js + Chart.js, темна тема)
 ├── tests/
-│   ├── test_ekf.py            # Тести EKF алгоритму
+│   ├── test_requirements.py   # Верифікація вимог FR/NFR/BR
 │   ├── test_nav_controller.py # Тести контролера навігації
-│   └── test_requirements.py   # Верифікація вимог курсової
-├── logs/                      # Логи роботи системи
+│   ├── test_ekf.py            # Тести алгоритму EKF
+│   ├── test_dead_reckoning.py # Тести Dead Reckoning
+│   ├── test_gnss_simulator.py # Тести симулятора GNSS
+│   └── test_smoke.py          # Smoke тест
 └── requirements.txt
 ```
 
+---
+
 ## Верифікація вимог
 
-| ID | Вимога | Тест | Результат |
-|----|--------|------|-----------|
-| FR-01 | Обробка GNSS даних | test_FR01_gnss_data_processing | ✅ |
-| FR-02 | Детекція втрати <0.1 с | test_FR02_gnss_loss_detection_speed | ✅ |
-| FR-03 | Sensor Fusion (EKF) | TestEKFGNSSUpdate | ✅ |
-| FR-04 | Dead Reckoning | test_FR04_dead_reckoning | ✅ |
-| FR-05 | LiDAR навігація | test_extended_loss_triggers_lidar | ✅ |
-| FR-06 | Візуалізація | test_FR06_visualization_data_available | ✅ |
-| NFR-PER-02 | Похибка DR ≤30 см/100 м | test_NFR_PER_02 | ✅ |
-| NFR-PER-03 | Затримка ≤50 мс | test_NFR_PER_03_latency_50ms | ✅ |
-| BR-01 | Без зупинки при втраті GPS | test_BR01_no_complete_stop | ✅ |
+| ID | Вимога | Тест | Статус |
+|----|--------|------|--------|
+| FR-01 | Обробка GNSS даних | `test_FR01_gnss_data_processing` | ✅ |
+| FR-02 | Детекція втрати < 0.1 с | `test_FR02_gnss_loss_detection_speed` | ✅ |
+| FR-03 | Sensor Fusion (EKF) | `TestEKFGNSSUpdate` | ✅ |
+| FR-04 | Dead Reckoning при втраті GNSS | `test_FR04_dead_reckoning_on_gnss_loss` | ✅ |
+| FR-05 | LiDAR навігація > 30 с | `test_extended_loss_triggers_lidar` | ✅ |
+| FR-06 | Дані для візуалізації | `test_FR06_visualization_data_available` | ✅ |
+| NFR-PER-01 | Точність RTK ≤ ±2 см | `test_rtk_accuracy_within_2cm` | ✅ |
+| NFR-PER-02 | Похибка DR ≤ 30 см / 100 м | `test_NFR_PER_02_dr_accuracy_30cm_per_100m` | ✅ |
+| NFR-PER-03 | Затримка ≤ 50 мс | `test_NFR_PER_03_latency_50ms` | ✅ |
+| BR-01 | Немає зупинки при втраті GNSS | `test_BR01_no_complete_stop_on_gnss_loss` | ✅ |
+
+---
+
+## Сценарії тестування (HMI)
+
+Кнопки в інтерфейсі запускають наступні сценарії:
+
+- **Короткочасна втрата** — GNSS деградує до LOST на 10 с → активується Dead Reckoning → відновлення RTK
+- **Тривала втрата** — GNSS LOST на 60 с → Dead Reckoning (0–30 с) → LiDAR Nav (30–60 с) → відновлення RTK
+
+---
+
+## Залежності
+
+| Пакет | Версія | Призначення |
+|-------|--------|-------------|
+| fastapi | ≥0.104 | REST API + WebSocket |
+| uvicorn | ≥0.24 | ASGI сервер |
+| numpy | ≥1.24 | Матричні обчислення EKF |
+| pytest | ≥7.4 | Тестування |
+| pytest-asyncio | ≥0.21 | Async тести |
+```

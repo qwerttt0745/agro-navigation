@@ -1,6 +1,3 @@
-"""
-Tests for GNSS simulator
-"""
 import sys
 from pathlib import Path
 
@@ -13,8 +10,6 @@ from config import settings
 def test_gnss_signal_loss_scenario_changes_mode():
     gnss = GNSSSimulator(settings.BASE_LAT, settings.BASE_LON)
     gnss.trigger_scenario('gnss_loss')
-
-    # Run several readings to advance scenario
     modes = []
     for _ in range(200):
         data = gnss.get_reading(0.0, 0.0)

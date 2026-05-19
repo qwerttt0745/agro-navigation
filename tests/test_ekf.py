@@ -1,7 +1,3 @@
-"""
-Тести розширеного фільтра Калмана (EKF)
-Верифікує вимоги: FR-03 (Sensor Fusion), NFR-PER-01 (точність RTK)
-"""
 import pytest
 import math
 import sys
@@ -12,32 +8,24 @@ from navigation.ekf import ExtendedKalmanFilter
 
 
 class TestEKFInitialization:
-    """Тести ініціалізації EKF"""
-
     def test_ekf_creates_successfully(self):
-        """EKF успішно створюється"""
         ekf = ExtendedKalmanFilter()
         assert ekf is not None
 
     def test_initial_state_is_zero(self):
-        """Початковий стан EKF — нульовий"""
         ekf = ExtendedKalmanFilter()
         state = ekf.get_state()
         assert abs(state['x']) < 1.0
         assert abs(state['y']) < 1.0
 
     def test_initial_uncertainty_is_high(self):
-        """Початкова невизначеність висока (до отримання даних)"""
         ekf = ExtendedKalmanFilter()
         state = ekf.get_state()
         assert state['position_uncertainty'] > 0
 
 
 class TestEKFPrediction:
-    """Тести фази передбачення EKF"""
-
     def test_predict_increases_uncertainty(self):
-        """Передбачення без вимірювань збільшує невизначеність"""
         ekf = ExtendedKalmanFilter()
         state_before = ekf.get_state()
 
@@ -51,7 +39,6 @@ class TestEKFPrediction:
         assert state_after['position_uncertainty'] >= state_before['position_uncertainty']
 
     def test_predict_updates_position_with_motion(self):
-        """Передбачення оновлює позицію при русі вперед"""
         ekf = ExtendedKalmanFilter()
 
         imu_data = {
@@ -68,10 +55,7 @@ class TestEKFPrediction:
 
 
 class TestEKFGNSSUpdate:
-    """Тести оновлення EKF від GNSS — верифікація FR-03"""
-
     def test_gnss_update_reduces_uncertainty(self):
-        """Оновлення від GNSS зменшує невизначеність (EKF converges)"""
         ekf = ExtendedKalmanFilter()
 
         gnss_data = {
@@ -92,7 +76,6 @@ class TestEKFGNSSUpdate:
         assert uncertainty_after <= uncertainty_before
 
     def test_gnss_update_corrects_position(self):
-        """GNSS оновлення коригує позицію до виміряного значення"""
         ekf = ExtendedKalmanFilter()
 
         gnss_data = {'is_fixed': True, 'x': 50.0, 'y': 75.0, 'z': 120.0}
@@ -103,7 +86,6 @@ class TestEKFGNSSUpdate:
         assert abs(state['y'] - 75.0) < 10.0
 
     def test_gnss_unfixed_does_not_update(self):
-        """GNSS без фіксації не оновлює стан"""
         ekf = ExtendedKalmanFilter()
         state_before = ekf.get_state()
 
@@ -115,12 +97,7 @@ class TestEKFGNSSUpdate:
 
 
 class TestEKFAccuracy:
-    """Тести точності EKF — верифікація NFR-PER-01"""
-
     def test_rtk_accuracy_within_2cm(self):
-        """
-        Верифікація NFR-PER-01: точність при RTK ≤ ±2 см
-        """
         ekf = ExtendedKalmanFilter()
 
         true_x, true_y = 100.0, 100.0

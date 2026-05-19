@@ -1,7 +1,3 @@
-"""
-Agro Navigation System — Головний сервер
-Дипломна робота: Розробка ПЗ системи навігації агротехніки
-"""
 import asyncio
 import json
 import logging
@@ -15,8 +11,6 @@ import uvicorn
 
 from navigation.nav_controller import NavigationController
 from config import settings
-
-# ── Логування ──────────────────────────────────────────────────────────────
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 
@@ -35,7 +29,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── FastAPI ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global nav_controller
@@ -54,8 +47,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
-
-# ── Стан симуляції ──────────────────────────────────────────────────────────
 nav_controller: NavigationController | None = None
 simulation_running = False
 simulation_paused = False
@@ -69,7 +60,6 @@ async def root():
 
 @app.get("/api/status")
 async def get_status():
-    """Поточний стан системи"""
     if not nav_controller:
         return {"error": "Контролер не ініціалізований"}
     return {
@@ -83,7 +73,6 @@ async def get_status():
 
 @app.get("/api/report")
 async def get_report():
-    """Звіт про виконану роботу (для логування у дипломній)"""
     if not nav_controller:
         return {"error": "Немає даних"}
     return nav_controller.generate_session_report()
@@ -132,7 +121,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 async def _handle_command(cmd: dict, websocket: WebSocket):
-    """Обробка команд від клієнта"""
     global simulation_running, simulation_paused
     action = cmd.get("action")
 
