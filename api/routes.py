@@ -19,13 +19,13 @@ router = APIRouter()
 
 @router.get("/")
 async def root():
-    """Serve index.html"""
+    \"\"\"Serve index.html\"\"\"
     return FileResponse("static/index.html")
 
 
 @router.get("/api/status")
 async def get_status():
-    """Get current system status"""
+    \"\"\"Get current system status\"\"\"
     if not nav_controller:
         return {"error": "Navigation controller not initialized"}
     
@@ -40,7 +40,7 @@ async def get_status():
 
 @router.post("/api/reset")
 async def reset_simulation():
-    """Reset simulation to initial state"""
+    \"\"\"Reset simulation to initial state\"\"\"
     global simulation_paused
     if not nav_controller:
         return {"error": "Navigation controller not initialized"}
@@ -52,7 +52,7 @@ async def reset_simulation():
 
 @router.post("/api/scenario/{scenario_name}")
 async def trigger_scenario(scenario_name: str):
-    """Trigger a predefined scenario"""
+    \"\"\"Trigger a predefined scenario\"\"\"
     if not nav_controller:
         return {"error": "Navigation controller not initialized"}
     
@@ -66,7 +66,7 @@ async def trigger_scenario(scenario_name: str):
 
 @router.get("/api/field")
 async def get_field_geojson():
-    """Get field boundaries and planned tracks as GeoJSON"""
+    \"\"\"Get field boundaries and planned tracks as GeoJSON\"\"\"
     if not nav_controller:
         return {"error": "Navigation controller not initialized"}
     
@@ -108,7 +108,7 @@ async def get_field_geojson():
 
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time telemetry streaming"""
+    \"\"\"WebSocket endpoint for real-time telemetry streaming\"\"\"
     global simulation_paused, simulation_task
     
     await websocket.accept()
@@ -150,7 +150,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 async def _run_simulation_loop(websocket: WebSocket):
-    """Run the main simulation loop"""
+    \"\"\"Run the main simulation loop\"\"\"
     global simulation_paused
     
     dt = 0.1  # 10 Hz simulation
@@ -173,6 +173,6 @@ async def _run_simulation_loop(websocket: WebSocket):
 
 
 def set_nav_controller(controller):
-    """Set the navigation controller instance"""
+    \"\"\"Set the navigation controller instance\"\"\"
     global nav_controller
     nav_controller = controller
