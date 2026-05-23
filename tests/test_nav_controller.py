@@ -4,6 +4,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from navigation.nav_controller import NavigationController, OperationMode
+from simulation.gnss_simulator import GNSSMode
+from config import settings
 
 
 @pytest.fixture
@@ -120,3 +122,19 @@ class TestNavControllerModeSwitch:
 
         assert final_mode == 'GNSS_RTK', \
             f"Після відновлення GNSS очікується GNSS_RTK, але: {final_mode}"
+
+    def test_lidar_activation_does_not_drop_position_to_zero(self, controller, monkeypatch):
+        controller.mode = OperationMode.DEAD_RECKONING
+        controller.gnss.mode = GNSSMode.LOST
+        controller.gnss_lost_timer = settings.LIDAR_ACTIVATION_DELAY
+        controller.vehicle.speed = 0.0
+
+        monkeypatch.setattr(controller.lidar, 'detect_row_offset', lambda scan: 3.0)
+        monkeypatch.setattr(controller.lidar, 'try_get_position_correction', lambda scan: (0.0, 3.0))
+
+        y_before = controller.ekf.get_state()['y']
+        result = controller.step(0.1)
+        y_after = controller.ekf.get_state()['y']
+
+        assert result['mode'] == 'LIDAR_NAV'
+        assert y_after > y_before - 5.0, f"LiDAR викликав різке падіння по y: {y_before:.2f} -> {y_after:.2f}"

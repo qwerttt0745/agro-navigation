@@ -129,7 +129,8 @@ class NavigationController:
             if correction:
                 dx, dy = correction
                 dy = max(-0.5, min(0.5, dy))
-                self.ekf.update_lidar((0.0, dy * 0.2))
+                measured_y = self.ekf.X[1] + dy * 0.2
+                self.ekf.update_lidar((0.0, measured_y))
         ekf_state = self.ekf.get_state()
         self._calculate_cross_track_error(ekf_state)
         self._apply_vehicle_control(ekf_state, dt)
